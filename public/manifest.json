@@ -1,0 +1,17 @@
+{
+  "name": "Konnexy OS Auto",
+  "short_name": "Konnexy Auto",
+  "description": "Do orçamento ao pagamento, tudo organizado em um só lugar para oficinas e estética automotiva.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#F8FAFC",
+  "theme_color": "#2563EB",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "type": "image/svg+xml",
+      "sizes": "192x192 512x512"
+    }
+  ]
+}
