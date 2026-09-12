@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
-import { useTenant } from '../../context/TenantContext';
 import { useToast } from '../../components/ui/Toast';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '../../components/ui/Card';
 import { Input } from '../../components/ui/Input';
@@ -17,27 +16,43 @@ export const RegisterPage: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
 
   const { register } = useAuth();
-  const { updateCompany } = useTenant();
-  const { success, error } = useToast();
+  const { success, error, info } = useToast();
   const navigate = useNavigate();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!fullName || !companyName || !email || !password) {
-      error('Preencha todos os campos obrigatórios');
+    if (!fullName || !companyName || !whatsapp || !email || !password) {
+      error('Preencha todos os campos obrigatórios.');
+      return;
+    }
+    if (password.length < 8) {
+      error('A senha precisa ter pelo menos 8 caracteres.');
       return;
     }
 
     setIsLoading(true);
     try {
-      await register(email, fullName, password);
-      updateCompany({
-        name: companyName,
-        whatsapp: whatsapp || '(11) 99999-9999',
-        email,
-      });
-      success('Conta criada com sucesso! Bem-vindo à sua oficina.');
-      navigate('/dashboard');
+      const result = await register(
+        email.trim(),
+        fullName.trim(),
+        password,
+        companyName.trim(),
+        whatsapp.trim(),
+      );
+
+      if (!result) {
+        error('Não foi possível criar a conta. Confira os dados e tente novamente.');
+        return;
+      }
+
+      if (result === 'confirmation_required') {
+        info('Conta criada. Confirme seu e-mail antes de entrar.');
+        navigate('/login');
+        return;
+      }
+
+      success('Conta e oficina criadas com sucesso!');
+      navigate('/onboarding');
     } catch {
       error('Falha ao criar conta.');
     } finally {
@@ -52,21 +67,15 @@ export const RegisterPage: React.FC = () => {
           <Wrench className="w-6 h-6" />
         </div>
         <div>
-          <span className="font-extrabold text-xl tracking-tight text-slate-900 block leading-tight">
-            Konnexy OS Auto
-          </span>
-          <span className="text-xs text-primary-600 font-bold uppercase tracking-wider">
-            Criar Nova Oficina
-          </span>
+          <span className="font-extrabold text-xl tracking-tight text-slate-900 block leading-tight">Konnexy OS Auto</span>
+          <span className="text-xs text-primary-600 font-bold uppercase tracking-wider">Criar Nova Oficina</span>
         </div>
       </div>
 
       <Card className="w-full max-w-md shadow-elevated border-slate-200">
         <CardHeader className="text-center pb-4">
-          <CardTitle className="text-xl font-extrabold">Comece Agora Gratuitamente</CardTitle>
-          <CardDescription>
-            Organize seus orçamentos e serviços em menos de 2 minutos.
-          </CardDescription>
+          <CardTitle className="text-xl font-extrabold">Comece Agora</CardTitle>
+          <CardDescription>Crie uma conta segura e configure sua oficina.</CardDescription>
         </CardHeader>
 
         <CardContent>
@@ -83,6 +92,7 @@ export const RegisterPage: React.FC = () => {
             <Input
               label="Seu Nome Completo *"
               required
+              autoComplete="name"
               placeholder="Ex: Carlos Silva"
               value={fullName}
               onChange={(e) => setFullName(e.target.value)}
@@ -93,6 +103,7 @@ export const RegisterPage: React.FC = () => {
               label="WhatsApp da Oficina *"
               type="tel"
               required
+              autoComplete="tel"
               placeholder="(11) 98765-4321"
               value={whatsapp}
               onChange={(e) => setWhatsapp(e.target.value)}
@@ -103,6 +114,7 @@ export const RegisterPage: React.FC = () => {
               label="E-mail *"
               type="email"
               required
+              autoComplete="email"
               placeholder="contato@suaoficina.com.br"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
@@ -113,29 +125,22 @@ export const RegisterPage: React.FC = () => {
               label="Criar Senha *"
               type="password"
               required
-              placeholder="Mínimo 6 caracteres"
+              autoComplete="new-password"
+              placeholder="Mínimo 8 caracteres"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               leftIcon={<Lock className="w-4 h-4" />}
             />
 
-            <Button
-              type="submit"
-              variant="primary"
-              size="lg"
-              className="w-full font-bold mt-2"
-              isLoading={isLoading}
-            >
-              Criar Conta e Acessar
+            <Button type="submit" variant="primary" size="lg" className="w-full font-bold mt-2" isLoading={isLoading}>
+              Criar Conta e Oficina
             </Button>
           </form>
 
           <div className="text-center pt-4 border-t border-slate-100 mt-4">
             <p className="text-xs text-slate-500">
               Já possui uma conta?{' '}
-              <Link to="/login" className="text-primary-600 font-bold hover:underline">
-                Fazer login
-              </Link>
+              <Link to="/login" className="text-primary-600 font-bold hover:underline">Fazer login</Link>
             </p>
           </div>
         </CardContent>
