@@ -1,39 +1,42 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { 
-  Customer, 
-  Vehicle, 
-  Quote, 
-  QuoteItem, 
-  QuoteStatus, 
+import React, { createContext, useContext, useEffect, useMemo, useState } from 'react';
+import {
+  Customer,
+  Vehicle,
+  Quote,
+  QuoteItem,
+  QuoteStatus,
   QuoteVersion,
   QuoteApprovalSnapshot,
   RejectionReasonCategory,
-  ServiceOrder, 
-  ServiceOrderStatus, 
-  ServiceOrderItem, 
-  ServiceOrderPhoto, 
-  AdditionalApproval, 
-  Payment, 
-  Reminder, 
+  ServiceOrder,
+  ServiceOrderStatus,
+  ServiceOrderItem,
+  ServiceOrderPhoto,
+  AdditionalApproval,
+  Payment,
+  Reminder,
   ServiceCatalogItem,
   ServicePackage,
   AuditLog,
   DashboardMetrics,
-  Company
+  Company,
 } from '../types';
-import { 
-  DEMO_COMPANY, 
-  DEMO_CUSTOMERS, 
-  DEMO_VEHICLES, 
-  DEMO_QUOTES, 
-  DEMO_SERVICE_ORDERS, 
-  DEMO_PAYMENTS, 
-  DEMO_REMINDERS, 
+import {
+  DEMO_COMPANY,
+  DEMO_CUSTOMERS,
+  DEMO_VEHICLES,
+  DEMO_QUOTES,
+  DEMO_SERVICE_ORDERS,
+  DEMO_PAYMENTS,
+  DEMO_REMINDERS,
   DEMO_CATALOG,
   DEMO_PACKAGES,
   DEMO_AUDIT_LOGS,
-  DEMO_PLATFORM_COMPANIES
+  DEMO_PLATFORM_COMPANIES,
 } from '../lib/demoData';
+import { isSupabaseConfigured, supabase } from '../lib/supabase';
+import { useAuth } from './AuthContext';
+import { useTenant } from './TenantContext';
 
 interface DataContextType {
   customers: Customer[];
@@ -47,23 +50,34 @@ interface DataContextType {
   servicePackages: ServicePackage[];
   auditLogs: AuditLog[];
   platformCompanies: Company[];
-  
-  // Customers & Vehicles
+  isDataLoading: boolean;
+
   addCustomer: (customerData: Omit<Customer, 'id' | 'company_id' | 'created_at' | 'updated_at'>) => Customer;
   updateCustomer: (id: string, customerData: Partial<Customer>) => void;
   deleteCustomer: (id: string, soft?: boolean) => void;
   getCustomerById: (id: string) => Customer | undefined;
-  
+
   addVehicle: (vehicleData: Omit<Vehicle, 'id' | 'company_id' | 'created_at' | 'updated_at'>) => Vehicle;
   updateVehicle: (id: string, vehicleData: Partial<Vehicle>) => void;
   deleteVehicle: (id: string, soft?: boolean) => void;
   getVehicleById: (id: string) => Vehicle | undefined;
   getVehiclesByCustomer: (customerId: string) => Vehicle[];
-  
-  // Quotes & Versioning
-  addQuote: (quoteData: Omit<Quote, 'id' | 'company_id' | 'quote_number' | 'current_version' | 'public_token' | 'created_at' | 'updated_at'>, items: Omit<QuoteItem, 'id' | 'company_id' | 'quote_id'>[]) => Quote;
-  updateQuote: (id: string, quoteData: Partial<Quote>, items?: Omit<QuoteItem, 'id' | 'company_id' | 'quote_id'>[]) => boolean;
-  createNewQuoteVersion: (quoteId: string, quoteData: Partial<Quote>, items: Omit<QuoteItem, 'id' | 'company_id' | 'quote_id'>[], changeSummary?: string) => Quote;
+
+  addQuote: (
+    quoteData: Omit<Quote, 'id' | 'company_id' | 'quote_number' | 'current_version' | 'public_token' | 'created_at' | 'updated_at'>,
+    items: Omit<QuoteItem, 'id' | 'company_id' | 'quote_id'>[],
+  ) => Quote;
+  updateQuote: (
+    id: string,
+    quoteData: Partial<Quote>,
+    items?: Omit<QuoteItem, 'id' | 'company_id' | 'quote_id'>[],
+  ) => boolean;
+  createNewQuoteVersion: (
+    quoteId: string,
+    quoteData: Partial<Quote>,
+    items: Omit<QuoteItem, 'id' | 'company_id' | 'quote_id'>[],
+    changeSummary?: string,
+  ) => Quote;
   duplicateQuote: (quoteId: string) => Quote | null;
   updateQuoteStatus: (id: string, status: QuoteStatus, reason?: string) => void;
   recordQuoteRejection: (id: string, category: RejectionReasonCategory, notes?: string) => void;
@@ -72,254 +86,513 @@ interface DataContextType {
   approveQuotePublic: (token: string, approverName?: string, termsAgreed?: boolean, clientIp?: string) => Quote | null;
   rejectQuotePublic: (token: string, category?: RejectionReasonCategory, reason?: string, notes?: string) => Quote | null;
   convertQuoteToServiceOrder: (quoteId: string, responsibleName?: string) => ServiceOrder | null;
-  
-  // Service Orders & Operations
-  addServiceOrder: (osData: Omit<ServiceOrder, 'id' | 'company_id' | 'os_number' | 'public_token' | 'created_at' | 'updated_at'>, items?: Omit<ServiceOrderItem, 'id' | 'company_id' | 'service_order_id'>[]) => ServiceOrder;
+
+  addServiceOrder: (
+    osData: Omit<ServiceOrder, 'id' | 'company_id' | 'os_number' | 'public_token' | 'created_at' | 'updated_at'>,
+    items?: Omit<ServiceOrderItem, 'id' | 'company_id' | 'service_order_id'>[],
+  ) => ServiceOrder;
   updateServiceOrder: (id: string, osData: Partial<ServiceOrder>) => void;
   updateServiceOrderStatus: (id: string, status: ServiceOrderStatus, notes?: string) => void;
   getServiceOrderById: (id: string) => ServiceOrder | undefined;
   getServiceOrderByToken: (token: string) => ServiceOrder | undefined;
-  addServiceOrderPhoto: (osId: string, photo: Omit<ServiceOrderPhoto, 'id' | 'company_id' | 'service_order_id' | 'created_at'>) => void;
-  addAdditionalApproval: (osId: string, title: string, description: string, amount: number, partsAmount?: number, laborAmount?: number, photoUrl?: string) => AdditionalApproval;
-  respondAdditionalApproval: (approvalToken: string, approved: boolean, approverName?: string, reason?: string) => boolean;
-  
-  // Payments
+  addServiceOrderPhoto: (
+    osId: string,
+    photo: Omit<ServiceOrderPhoto, 'id' | 'company_id' | 'service_order_id' | 'created_at'>,
+  ) => void;
+  addAdditionalApproval: (
+    osId: string,
+    title: string,
+    description: string,
+    amount: number,
+    partsAmount?: number,
+    laborAmount?: number,
+    photoUrl?: string,
+  ) => AdditionalApproval;
+  respondAdditionalApproval: (
+    approvalToken: string,
+    approved: boolean,
+    approverName?: string,
+    reason?: string,
+  ) => boolean;
+
   addPayment: (paymentData: Omit<Payment, 'id' | 'company_id' | 'created_at'>) => Payment;
   deletePayment: (id: string) => void;
   getPaymentsByOS: (osId: string) => Payment[];
-  
-  // Reminders
+
   addReminder: (reminderData: Omit<Reminder, 'id' | 'company_id' | 'created_at'>) => Reminder;
   updateReminderStatus: (id: string, status: Reminder['status']) => void;
   deleteReminder: (id: string) => void;
-  
-  // Catalog & Packages
+
   addCatalogItem: (item: Omit<ServiceCatalogItem, 'id' | 'company_id' | 'created_at'>) => ServiceCatalogItem;
   toggleFavoriteCatalogItem: (id: string) => void;
   deleteCatalogItem: (id: string) => void;
   addPackage: (pkg: Omit<ServicePackage, 'id' | 'company_id' | 'created_at'>) => ServicePackage;
   deletePackage: (id: string) => void;
-  
-  // Intelligence, Follow-up & Audit
+
   getStagnantQuotes: () => Quote[];
   getLostQuotesBreakdown: () => { category: string; count: number; total: number; percentage: number }[];
   getDashboardMetrics: () => DashboardMetrics;
-  logAuditAction: (action: string, entityType: string, entityId: string, metadata?: Record<string, any>) => void;
+  logAuditAction: (action: string, entityType: string, entityId: string, metadata?: Record<string, unknown>) => void;
   searchGlobal: (query: string) => {
     customers: Customer[];
     vehicles: Vehicle[];
     quotes: Quote[];
     serviceOrders: ServiceOrder[];
   };
-  
-  // Reset
+
   resetAllDataToDemo: () => void;
+  reloadData: () => Promise<void>;
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
 
+const DEMO_STORAGE = {
+  customers: 'konnexy_demo_customers',
+  vehicles: 'konnexy_demo_vehicles',
+  quotes: 'konnexy_demo_quotes',
+  serviceOrders: 'konnexy_demo_service_orders',
+  payments: 'konnexy_demo_payments',
+  reminders: 'konnexy_demo_reminders',
+  catalog: 'konnexy_demo_catalog',
+  packages: 'konnexy_demo_packages',
+  auditLogs: 'konnexy_demo_audit_logs',
+};
+
+const nowIso = () => new Date().toISOString();
+const uuid = () => crypto.randomUUID();
+
+const secureToken = (prefix: string) => {
+  const bytes = new Uint8Array(24);
+  crypto.getRandomValues(bytes);
+  const value = Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('');
+  return `${prefix}-${value}`;
+};
+
+const readDemo = <T,>(key: string, fallback: T): T => {
+  const raw = localStorage.getItem(key);
+  if (!raw) return fallback;
+  try {
+    return JSON.parse(raw) as T;
+  } catch {
+    return fallback;
+  }
+};
+
+const numericQuoteNumber = (value: string | number) => {
+  if (typeof value === 'number') return value;
+  const last = value.match(/(\d+)$/)?.[1];
+  return Number(last || 0);
+};
+
+const persistError = (operation: string, error: unknown) => {
+  if (error) console.error(`[Supabase] ${operation}`, error);
+};
+
 export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [customers, setCustomers] = useState<Customer[]>(() => {
-    const saved = localStorage.getItem('konnexy_customers');
-    return saved ? JSON.parse(saved) : DEMO_CUSTOMERS;
-  });
+  const { user, isDemoMode } = useAuth();
+  const { company, setCompany } = useTenant();
+  const tenantId = user?.company_id || (isDemoMode ? company.id : undefined);
+  const productionMode = Boolean(isSupabaseConfigured && supabase && user && !isDemoMode && user.company_id);
 
-  const [vehicles, setVehicles] = useState<Vehicle[]>(() => {
-    const saved = localStorage.getItem('konnexy_vehicles');
-    return saved ? JSON.parse(saved) : DEMO_VEHICLES;
-  });
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [vehicles, setVehicles] = useState<Vehicle[]>([]);
+  const [quotes, setQuotes] = useState<Quote[]>([]);
+  const [serviceOrders, setServiceOrders] = useState<ServiceOrder[]>([]);
+  const [payments, setPayments] = useState<Payment[]>([]);
+  const [reminders, setReminders] = useState<Reminder[]>([]);
+  const [catalog, setCatalog] = useState<ServiceCatalogItem[]>([]);
+  const [packages, setPackages] = useState<ServicePackage[]>([]);
+  const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
+  const [platformCompanies, setPlatformCompanies] = useState<Company[]>([]);
+  const [isDataLoading, setIsDataLoading] = useState(false);
 
-  const [quotes, setQuotes] = useState<Quote[]>(() => {
-    const saved = localStorage.getItem('konnexy_quotes');
-    return saved ? JSON.parse(saved) : DEMO_QUOTES;
-  });
+  const loadDemoData = () => {
+    setCustomers(readDemo(DEMO_STORAGE.customers, DEMO_CUSTOMERS));
+    setVehicles(readDemo(DEMO_STORAGE.vehicles, DEMO_VEHICLES));
+    setQuotes(readDemo(DEMO_STORAGE.quotes, DEMO_QUOTES));
+    setServiceOrders(readDemo(DEMO_STORAGE.serviceOrders, DEMO_SERVICE_ORDERS));
+    setPayments(readDemo(DEMO_STORAGE.payments, DEMO_PAYMENTS));
+    setReminders(readDemo(DEMO_STORAGE.reminders, DEMO_REMINDERS));
+    setCatalog(readDemo(DEMO_STORAGE.catalog, DEMO_CATALOG));
+    setPackages(readDemo(DEMO_STORAGE.packages, DEMO_PACKAGES));
+    setAuditLogs(readDemo(DEMO_STORAGE.auditLogs, DEMO_AUDIT_LOGS));
+    setPlatformCompanies(DEMO_PLATFORM_COMPANIES);
+  };
 
-  const [serviceOrders, setServiceOrders] = useState<ServiceOrder[]>(() => {
-    const saved = localStorage.getItem('konnexy_service_orders');
-    return saved ? JSON.parse(saved) : DEMO_SERVICE_ORDERS;
-  });
+  const reloadData = async () => {
+    if (isDemoMode) {
+      loadDemoData();
+      return;
+    }
+    if (!supabase || !user?.company_id) return;
 
-  const [payments, setPayments] = useState<Payment[]>(() => {
-    const saved = localStorage.getItem('konnexy_payments');
-    return saved ? JSON.parse(saved) : DEMO_PAYMENTS;
-  });
+    setIsDataLoading(true);
+    const companyId = user.company_id;
 
-  const [reminders, setReminders] = useState<Reminder[]>(() => {
-    const saved = localStorage.getItem('konnexy_reminders');
-    return saved ? JSON.parse(saved) : DEMO_REMINDERS;
-  });
+    try {
+      const [
+        customersResult,
+        vehiclesResult,
+        quotesResult,
+        quoteItemsResult,
+        quoteVersionsResult,
+        quoteEventsResult,
+        serviceOrdersResult,
+        serviceOrderItemsResult,
+        serviceOrderEventsResult,
+        serviceOrderPhotosResult,
+        approvalsResult,
+        paymentsResult,
+        remindersResult,
+        catalogResult,
+        packagesResult,
+        auditResult,
+      ] = await Promise.all([
+        supabase.from('customers').select('*').eq('company_id', companyId).is('deleted_at', null).order('created_at', { ascending: false }),
+        supabase.from('vehicles').select('*').eq('company_id', companyId).is('deleted_at', null).order('created_at', { ascending: false }),
+        supabase.from('quotes').select('*').eq('company_id', companyId).is('deleted_at', null).order('created_at', { ascending: false }),
+        supabase.from('quote_items').select('*').eq('company_id', companyId),
+        supabase.from('quote_versions').select('*').eq('company_id', companyId).order('version_number'),
+        supabase.from('quote_events').select('*').eq('company_id', companyId).order('created_at'),
+        supabase.from('service_orders').select('*').eq('company_id', companyId).is('deleted_at', null).order('created_at', { ascending: false }),
+        supabase.from('service_order_items').select('*').eq('company_id', companyId),
+        supabase.from('service_order_events').select('*').eq('company_id', companyId).order('created_at'),
+        supabase.from('service_order_photos').select('*').eq('company_id', companyId).order('created_at'),
+        supabase.from('additional_approvals').select('*').eq('company_id', companyId).order('created_at'),
+        supabase.from('payments').select('*').eq('company_id', companyId).is('deleted_at', null).order('created_at', { ascending: false }),
+        supabase.from('reminders').select('*').eq('company_id', companyId).is('deleted_at', null).order('due_date'),
+        supabase.from('services_catalog').select('*').eq('company_id', companyId).order('created_at', { ascending: false }),
+        supabase.from('service_packages').select('*').eq('company_id', companyId).order('created_at', { ascending: false }),
+        supabase.from('audit_logs').select('*').eq('company_id', companyId).order('created_at', { ascending: false }).limit(250),
+      ]);
 
-  const [catalog, setCatalog] = useState<ServiceCatalogItem[]>(() => {
-    const saved = localStorage.getItem('konnexy_catalog');
-    return saved ? JSON.parse(saved) : DEMO_CATALOG;
-  });
+      const results = [
+        customersResult,
+        vehiclesResult,
+        quotesResult,
+        quoteItemsResult,
+        quoteVersionsResult,
+        quoteEventsResult,
+        serviceOrdersResult,
+        serviceOrderItemsResult,
+        serviceOrderEventsResult,
+        serviceOrderPhotosResult,
+        approvalsResult,
+        paymentsResult,
+        remindersResult,
+        catalogResult,
+        packagesResult,
+        auditResult,
+      ];
+      const firstError = results.find(result => result.error)?.error;
+      if (firstError) throw firstError;
 
-  const [packages, setPackages] = useState<ServicePackage[]>(() => {
-    const saved = localStorage.getItem('konnexy_packages');
-    return saved ? JSON.parse(saved) : DEMO_PACKAGES;
-  });
+      const loadedCustomers = (customersResult.data || []) as Customer[];
+      const loadedVehicles = (vehiclesResult.data || []) as Vehicle[];
+      const loadedQuoteItems = (quoteItemsResult.data || []) as QuoteItem[];
+      const loadedQuoteVersions = (quoteVersionsResult.data || []) as QuoteVersion[];
+      const loadedServiceItems = (serviceOrderItemsResult.data || []) as ServiceOrderItem[];
+      const loadedServicePhotos = (serviceOrderPhotosResult.data || []) as ServiceOrderPhoto[];
+      const loadedApprovals = (approvalsResult.data || []) as AdditionalApproval[];
 
-  const [auditLogs, setAuditLogs] = useState<AuditLog[]>(() => {
-    const saved = localStorage.getItem('konnexy_audit_logs');
-    return saved ? JSON.parse(saved) : DEMO_AUDIT_LOGS;
-  });
+      setCustomers(loadedCustomers);
+      setVehicles(loadedVehicles);
+      setQuotes(((quotesResult.data || []) as Quote[]).map(q => ({
+        ...q,
+        version: q.current_version || 1,
+        items: loadedQuoteItems.filter(item => item.quote_id === q.id),
+        versions: loadedQuoteVersions.filter(version => version.quote_id === q.id),
+        events: (quoteEventsResult.data || []).filter((event: { quote_id: string }) => event.quote_id === q.id),
+      })));
+      setServiceOrders(((serviceOrdersResult.data || []) as ServiceOrder[]).map(order => ({
+        ...order,
+        items: loadedServiceItems.filter(item => item.service_order_id === order.id),
+        events: (serviceOrderEventsResult.data || []).filter((event: { service_order_id: string }) => event.service_order_id === order.id),
+        photos: loadedServicePhotos.filter(photo => photo.service_order_id === order.id),
+        additional_approvals: loadedApprovals.filter(approval => approval.service_order_id === order.id),
+      })));
+      setPayments((paymentsResult.data || []) as Payment[]);
+      setReminders(((remindersResult.data || []) as Reminder[]).map(reminder => ({
+        ...reminder,
+        customer: loadedCustomers.find(customer => customer.id === reminder.customer_id),
+        vehicle: loadedVehicles.find(vehicle => vehicle.id === reminder.vehicle_id),
+      })));
+      setCatalog((catalogResult.data || []) as ServiceCatalogItem[]);
+      setPackages((packagesResult.data || []) as ServicePackage[]);
+      setAuditLogs((auditResult.data || []) as AuditLog[]);
 
-  const [platformCompanies] = useState<Company[]>(DEMO_PLATFORM_COMPANIES);
+      if (user.is_superadmin || user.role === 'superadmin') {
+        const { data: companiesData, error: companiesError } = await supabase
+          .from('companies')
+          .select('*')
+          .order('created_at', { ascending: false });
+        if (companiesError) throw companiesError;
+        setPlatformCompanies((companiesData || []) as Company[]);
+      } else {
+        setPlatformCompanies([]);
+      }
+    } catch (error) {
+      persistError('Falha ao carregar dados do tenant.', error);
+    } finally {
+      setIsDataLoading(false);
+    }
+  };
 
-  // Sync to localStorage
   useEffect(() => {
-    localStorage.setItem('konnexy_customers', JSON.stringify(customers));
-  }, [customers]);
+    if (isDemoMode) {
+      loadDemoData();
+      return;
+    }
+
+    if (productionMode) void reloadData();
+  }, [isDemoMode, productionMode, user?.company_id]);
 
   useEffect(() => {
-    localStorage.setItem('konnexy_vehicles', JSON.stringify(vehicles));
-  }, [vehicles]);
-
+    if (!isDemoMode) return;
+    localStorage.setItem(DEMO_STORAGE.customers, JSON.stringify(customers));
+  }, [customers, isDemoMode]);
   useEffect(() => {
-    localStorage.setItem('konnexy_quotes', JSON.stringify(quotes));
-  }, [quotes]);
-
+    if (!isDemoMode) return;
+    localStorage.setItem(DEMO_STORAGE.vehicles, JSON.stringify(vehicles));
+  }, [vehicles, isDemoMode]);
   useEffect(() => {
-    localStorage.setItem('konnexy_service_orders', JSON.stringify(serviceOrders));
-  }, [serviceOrders]);
-
+    if (!isDemoMode) return;
+    localStorage.setItem(DEMO_STORAGE.quotes, JSON.stringify(quotes));
+  }, [quotes, isDemoMode]);
   useEffect(() => {
-    localStorage.setItem('konnexy_payments', JSON.stringify(payments));
-  }, [payments]);
-
+    if (!isDemoMode) return;
+    localStorage.setItem(DEMO_STORAGE.serviceOrders, JSON.stringify(serviceOrders));
+  }, [serviceOrders, isDemoMode]);
   useEffect(() => {
-    localStorage.setItem('konnexy_reminders', JSON.stringify(reminders));
-  }, [reminders]);
-
+    if (!isDemoMode) return;
+    localStorage.setItem(DEMO_STORAGE.payments, JSON.stringify(payments));
+  }, [payments, isDemoMode]);
   useEffect(() => {
-    localStorage.setItem('konnexy_catalog', JSON.stringify(catalog));
-  }, [catalog]);
-
+    if (!isDemoMode) return;
+    localStorage.setItem(DEMO_STORAGE.reminders, JSON.stringify(reminders));
+  }, [reminders, isDemoMode]);
   useEffect(() => {
-    localStorage.setItem('konnexy_packages', JSON.stringify(packages));
-  }, [packages]);
-
+    if (!isDemoMode) return;
+    localStorage.setItem(DEMO_STORAGE.catalog, JSON.stringify(catalog));
+  }, [catalog, isDemoMode]);
   useEffect(() => {
-    localStorage.setItem('konnexy_audit_logs', JSON.stringify(auditLogs));
-  }, [auditLogs]);
+    if (!isDemoMode) return;
+    localStorage.setItem(DEMO_STORAGE.packages, JSON.stringify(packages));
+  }, [packages, isDemoMode]);
+  useEffect(() => {
+    if (!isDemoMode) return;
+    localStorage.setItem(DEMO_STORAGE.auditLogs, JSON.stringify(auditLogs));
+  }, [auditLogs, isDemoMode]);
 
-  // Helpers
-  const logAuditAction = (action: string, entityType: string, entityId: string, metadata?: Record<string, any>) => {
-    const newLog: AuditLog = {
-      id: `log-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-      company_id: DEMO_COMPANY.id,
-      user_name: 'Usuário Ativo',
+  // Public pages receive only a sanitized payload from SECURITY DEFINER RPCs.
+  useEffect(() => {
+    if (!supabase || isDemoMode) return;
+
+    const quoteMatch = window.location.pathname.match(/^\/orcamento\/([^/]+)$/);
+    const trackingMatch = window.location.pathname.match(/^\/acompanhar\/([^/]+)$/);
+
+    if (quoteMatch) {
+      const token = decodeURIComponent(quoteMatch[1]);
+      void supabase.rpc('get_public_quote', { p_token: token }).then(({ data, error }) => {
+        if (error || !data) {
+          persistError('Falha ao carregar orçamento público.', error);
+          return;
+        }
+        const payload = data as { quote?: Quote; company?: Company };
+        if (!payload.quote) return;
+        const publicQuote = payload.quote;
+        setQuotes([publicQuote]);
+        if (publicQuote.customer) setCustomers([publicQuote.customer]);
+        if (publicQuote.vehicle) setVehicles([publicQuote.vehicle]);
+        if (payload.company) setCompany(payload.company);
+      });
+    }
+
+    if (trackingMatch) {
+      const token = decodeURIComponent(trackingMatch[1]);
+      void supabase.rpc('get_public_service_order', { p_token: token }).then(({ data, error }) => {
+        if (error || !data) {
+          persistError('Falha ao carregar acompanhamento público.', error);
+          return;
+        }
+        const payload = data as { service_order?: ServiceOrder; company?: Company };
+        if (!payload.service_order) return;
+        const order = payload.service_order;
+        setServiceOrders([order]);
+        if (order.customer) setCustomers([order.customer]);
+        if (order.vehicle) setVehicles([order.vehicle]);
+        if (payload.company) setCompany(payload.company);
+      });
+    }
+  }, [isDemoMode, setCompany]);
+
+  const activeCompanyId = () => tenantId || company.id || DEMO_COMPANY.id;
+
+  const logAuditAction = (
+    action: string,
+    entityType: string,
+    entityId: string,
+    metadata?: Record<string, unknown>,
+  ) => {
+    const log: AuditLog = {
+      id: uuid(),
+      company_id: activeCompanyId(),
+      user_id: user?.id,
+      user_name: user?.full_name || 'Sistema',
       action,
       entity_type: entityType,
       entity_id: entityId,
       metadata,
-      created_at: new Date().toISOString()
+      created_at: nowIso(),
     };
-    setAuditLogs(prev => [newLog, ...prev]);
+    setAuditLogs(prev => [log, ...prev]);
+
+    if (productionMode && supabase) {
+      void supabase.from('audit_logs').insert(log).then(({ error }) => persistError('audit_logs.insert', error));
+    }
   };
 
-  const enrichQuote = (q: Quote): Quote => {
-    const customer = customers.find(c => c.id === q.customer_id);
-    const vehicle = vehicles.find(v => v.id === q.vehicle_id);
-    return { ...q, customer, vehicle, version: q.current_version || q.version || 1 };
-  };
+  const enrichVehicle = (vehicle: Vehicle): Vehicle => ({
+    ...vehicle,
+    customer: customers.find(customer => customer.id === vehicle.customer_id),
+  });
 
-  const enrichVehicle = (v: Vehicle): Vehicle => {
-    const customer = customers.find(c => c.id === v.customer_id);
-    return { ...v, customer };
-  };
+  const enrichQuote = (quote: Quote): Quote => ({
+    ...quote,
+    version: quote.current_version || quote.version || 1,
+    customer: customers.find(customer => customer.id === quote.customer_id) || quote.customer,
+    vehicle: vehicles.find(vehicle => vehicle.id === quote.vehicle_id) || quote.vehicle,
+  });
 
-  // 1. CUSTOMERS
   const addCustomer = (customerData: Omit<Customer, 'id' | 'company_id' | 'created_at' | 'updated_at'>): Customer => {
-    const newCustomer: Customer = {
+    const customer: Customer = {
       ...customerData,
-      id: `cust-${Date.now()}`,
-      company_id: DEMO_COMPANY.id,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
+      id: uuid(),
+      company_id: activeCompanyId(),
+      created_at: nowIso(),
+      updated_at: nowIso(),
     };
-    setCustomers(prev => [newCustomer, ...prev]);
-    logAuditAction('customer.created', 'customer', newCustomer.id, { name: newCustomer.name });
-    return newCustomer;
+    setCustomers(prev => [customer, ...prev]);
+    if (productionMode && supabase) {
+      void supabase.from('customers').insert(customer).then(({ error }) => persistError('customers.insert', error));
+    }
+    logAuditAction('customer.created', 'customer', customer.id, { name: customer.name });
+    return customer;
   };
 
   const updateCustomer = (id: string, customerData: Partial<Customer>) => {
-    setCustomers(prev => prev.map(c => c.id === id ? { ...c, ...customerData, updated_at: new Date().toISOString() } : c));
-    logAuditAction('customer.updated', 'customer', id, customerData);
+    const safe = { ...customerData, id: undefined, company_id: undefined, updated_at: nowIso() };
+    delete safe.id;
+    delete safe.company_id;
+    setCustomers(prev => prev.map(customer => customer.id === id ? { ...customer, ...safe } : customer));
+    if (productionMode && supabase) {
+      void supabase.from('customers').update(safe).eq('id', id).eq('company_id', activeCompanyId())
+        .then(({ error }) => persistError('customers.update', error));
+    }
+    logAuditAction('customer.updated', 'customer', id, customerData as Record<string, unknown>);
   };
 
-  const deleteCustomer = (id: string, soft: boolean = true) => {
+  const deleteCustomer = (id: string, soft = true) => {
     if (soft) {
-      setCustomers(prev => prev.map(c => c.id === id ? { ...c, deleted_at: new Date().toISOString() } : c));
+      const deletedAt = nowIso();
+      setCustomers(prev => prev.map(customer => customer.id === id ? { ...customer, deleted_at: deletedAt } : customer));
+      if (productionMode && supabase) {
+        void supabase.from('customers').update({ deleted_at: deletedAt }).eq('id', id).eq('company_id', activeCompanyId())
+          .then(({ error }) => persistError('customers.soft_delete', error));
+      }
     } else {
-      setCustomers(prev => prev.filter(c => c.id !== id));
+      setCustomers(prev => prev.filter(customer => customer.id !== id));
+      if (productionMode && supabase) {
+        void supabase.from('customers').delete().eq('id', id).eq('company_id', activeCompanyId())
+          .then(({ error }) => persistError('customers.delete', error));
+      }
     }
     logAuditAction('customer.deleted', 'customer', id);
   };
 
-  const getCustomerById = (id: string) => customers.find(c => c.id === id && !c.deleted_at);
+  const getCustomerById = (id: string) => customers.find(customer => customer.id === id && !customer.deleted_at);
 
-  // 2. VEHICLES
   const addVehicle = (vehicleData: Omit<Vehicle, 'id' | 'company_id' | 'created_at' | 'updated_at'>): Vehicle => {
-    const newVehicle: Vehicle = {
-      ...vehicleData,
-      id: `veh-${Date.now()}`,
-      company_id: DEMO_COMPANY.id,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
+    const { customer: _customer, ...dbData } = vehicleData;
+    const vehicle: Vehicle = {
+      ...dbData,
+      id: uuid(),
+      company_id: activeCompanyId(),
+      created_at: nowIso(),
+      updated_at: nowIso(),
     };
-    setVehicles(prev => [newVehicle, ...prev]);
-    logAuditAction('vehicle.created', 'vehicle', newVehicle.id, { plate: newVehicle.license_plate });
-    return enrichVehicle(newVehicle);
+    setVehicles(prev => [vehicle, ...prev]);
+    if (productionMode && supabase) {
+      void supabase.from('vehicles').insert(vehicle).then(({ error }) => persistError('vehicles.insert', error));
+    }
+    logAuditAction('vehicle.created', 'vehicle', vehicle.id, { plate: vehicle.license_plate });
+    return enrichVehicle(vehicle);
   };
 
   const updateVehicle = (id: string, vehicleData: Partial<Vehicle>) => {
-    setVehicles(prev => prev.map(v => v.id === id ? { ...v, ...vehicleData, updated_at: new Date().toISOString() } : v));
-    logAuditAction('vehicle.updated', 'vehicle', id, vehicleData);
+    const { customer: _customer, id: _id, company_id: _companyId, ...safe } = vehicleData;
+    const patch = { ...safe, updated_at: nowIso() };
+    setVehicles(prev => prev.map(vehicle => vehicle.id === id ? { ...vehicle, ...patch } : vehicle));
+    if (productionMode && supabase) {
+      void supabase.from('vehicles').update(patch).eq('id', id).eq('company_id', activeCompanyId())
+        .then(({ error }) => persistError('vehicles.update', error));
+    }
+    logAuditAction('vehicle.updated', 'vehicle', id, safe as Record<string, unknown>);
   };
 
-  const deleteVehicle = (id: string, soft: boolean = true) => {
+  const deleteVehicle = (id: string, soft = true) => {
     if (soft) {
-      setVehicles(prev => prev.map(v => v.id === id ? { ...v, deleted_at: new Date().toISOString() } : v));
+      const deletedAt = nowIso();
+      setVehicles(prev => prev.map(vehicle => vehicle.id === id ? { ...vehicle, deleted_at: deletedAt } : vehicle));
+      if (productionMode && supabase) {
+        void supabase.from('vehicles').update({ deleted_at: deletedAt }).eq('id', id).eq('company_id', activeCompanyId())
+          .then(({ error }) => persistError('vehicles.soft_delete', error));
+      }
     } else {
-      setVehicles(prev => prev.filter(v => v.id !== id));
+      setVehicles(prev => prev.filter(vehicle => vehicle.id !== id));
+      if (productionMode && supabase) {
+        void supabase.from('vehicles').delete().eq('id', id).eq('company_id', activeCompanyId())
+          .then(({ error }) => persistError('vehicles.delete', error));
+      }
     }
     logAuditAction('vehicle.deleted', 'vehicle', id);
   };
 
   const getVehicleById = (id: string) => {
-    const veh = vehicles.find(v => v.id === id && !v.deleted_at);
-    return veh ? enrichVehicle(veh) : undefined;
+    const vehicle = vehicles.find(item => item.id === id && !item.deleted_at);
+    return vehicle ? enrichVehicle(vehicle) : undefined;
+  };
+  const getVehiclesByCustomer = (customerId: string) => vehicles
+    .filter(vehicle => vehicle.customer_id === customerId && !vehicle.deleted_at)
+    .map(enrichVehicle);
+
+  const quoteDbRow = (quote: Quote, includeNumber = true) => {
+    const {
+      customer: _customer,
+      vehicle: _vehicle,
+      items: _items,
+      versions: _versions,
+      events: _events,
+      version: _version,
+      total_amount: _totalAmount,
+      ...row
+    } = quote;
+    if (!includeNumber) delete (row as Partial<Quote>).quote_number;
+    return row;
   };
 
-  const getVehiclesByCustomer = (customerId: string) => {
-    return vehicles.filter(v => v.customer_id === customerId && !v.deleted_at).map(enrichVehicle);
-  };
-
-  // 3. QUOTES & VERSIONING
   const addQuote = (
     quoteData: Omit<Quote, 'id' | 'company_id' | 'quote_number' | 'current_version' | 'public_token' | 'created_at' | 'updated_at'>,
-    items: Omit<QuoteItem, 'id' | 'company_id' | 'quote_id'>[]
+    items: Omit<QuoteItem, 'id' | 'company_id' | 'quote_id'>[],
   ): Quote => {
-    const maxNum = quotes.reduce((max, q) => {
-      const n = typeof q.quote_number === 'number' ? q.quote_number : parseInt(String(q.quote_number).replace(/\D/g, ''), 10) || 1000;
-      return Math.max(max, n);
-    }, 1000);
-    const nextNumber = maxNum + 1;
-    const token = `quote-${Math.random().toString(36).substring(2, 12)}${Date.now().toString(36).substring(4)}`;
-    const quoteId = `quote-${Date.now()}`;
-
-    const formattedItems: QuoteItem[] = items.map((it, idx) => ({
-      ...it,
-      id: `qi-${Date.now()}-${idx}`,
-      company_id: DEMO_COMPANY.id,
-      quote_id: quoteId,
-    }));
-
-    const initialVersion: QuoteVersion = {
-      id: `qv-${Date.now()}-1`,
-      quote_id: quoteId,
-      company_id: DEMO_COMPANY.id,
+    const companyId = activeCompanyId();
+    const id = uuid();
+    const maxNumber = quotes.reduce((max, quote) => Math.max(max, numericQuoteNumber(quote.quote_number)), 1000);
+    const formattedItems: QuoteItem[] = items.map(item => ({ ...item, id: uuid(), company_id: companyId, quote_id: id }));
+    const version: QuoteVersion = {
+      id: uuid(),
+      quote_id: id,
+      company_id: companyId,
       version_number: 1,
       subtotal: quoteData.subtotal,
       discount: quoteData.discount,
@@ -333,69 +606,107 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       items: formattedItems,
       items_snapshot: formattedItems,
       status: quoteData.status || 'draft',
-      created_at: new Date().toISOString()
+      created_at: nowIso(),
+      created_by: user?.id,
     };
-
-    const newQuote: Quote = {
+    const event = {
+      id: uuid(),
+      company_id: companyId,
+      quote_id: id,
+      event_type: 'created' as const,
+      description: 'Orçamento versão v1 gerado',
+      created_at: nowIso(),
+    };
+    const quote: Quote = {
       ...quoteData,
-      id: quoteId,
-      company_id: DEMO_COMPANY.id,
-      quote_number: `ORC-2026-${nextNumber}`,
+      id,
+      company_id: companyId,
+      quote_number: maxNumber + 1,
       current_version: 1,
       version: 1,
-      public_token: token,
+      public_token: secureToken('quote'),
+      public_token_expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+      public_token_revoked: false,
       items: formattedItems,
-      versions: [initialVersion],
+      versions: [version],
+      events: [event],
       is_immutable: false,
-      events: [
-        {
-          id: `qe-${Date.now()}`,
-          company_id: DEMO_COMPANY.id,
-          quote_id: quoteId,
-          event_type: 'created',
-          description: 'Orçamento versão v1 gerado',
-          created_at: new Date().toISOString(),
-        }
-      ],
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
+      created_by: user?.id,
+      created_at: nowIso(),
+      updated_at: nowIso(),
     };
+    setQuotes(prev => [quote, ...prev]);
 
-    setQuotes(prev => [newQuote, ...prev]);
-    logAuditAction('quote.created', 'quote', newQuote.id, { quote_number: newQuote.quote_number, total: newQuote.total });
-    return enrichQuote(newQuote);
+    if (productionMode && supabase) {
+      void supabase.from('quotes').insert(quoteDbRow(quote, false)).select('quote_number').single().then(async ({ data, error }) => {
+        if (error) {
+          persistError('quotes.insert', error);
+          return;
+        }
+        if (data?.quote_number) {
+          setQuotes(prev => prev.map(item => item.id === id ? { ...item, quote_number: data.quote_number } : item));
+        }
+        const [itemsInsert, versionInsert, eventInsert] = await Promise.all([
+          supabase.from('quote_items').insert(formattedItems),
+          supabase.from('quote_versions').insert({
+            id: version.id,
+            quote_id: id,
+            company_id: companyId,
+            version_number: 1,
+            subtotal: version.subtotal,
+            discount: version.discount,
+            total: version.total,
+            down_payment: version.down_payment,
+            balance: version.balance,
+            estimated_days: version.estimated_days,
+            notes: version.notes,
+            items_snapshot: formattedItems,
+            status: version.status,
+            created_by: user?.id,
+            created_at: version.created_at,
+          }),
+          supabase.from('quote_events').insert(event),
+        ]);
+        persistError('quote_items.insert', itemsInsert.error);
+        persistError('quote_versions.insert', versionInsert.error);
+        persistError('quote_events.insert', eventInsert.error);
+      });
+    }
+
+    logAuditAction('quote.created', 'quote', id, { total: quote.total });
+    return enrichQuote(quote);
   };
 
   const updateQuote = (
     id: string,
     quoteData: Partial<Quote>,
-    items?: Omit<QuoteItem, 'id' | 'company_id' | 'quote_id'>[]
+    items?: Omit<QuoteItem, 'id' | 'company_id' | 'quote_id'>[],
   ): boolean => {
-    const existing = quotes.find(q => q.id === id);
-    if (!existing) return false;
+    const existing = quotes.find(quote => quote.id === id);
+    if (!existing || existing.status === 'approved' || existing.is_immutable) return false;
 
-    if (existing.status === 'approved' || existing.is_immutable) {
-      console.warn('Orçamento aprovado é imutável. Crie uma nova versão para alterar.');
-      return false;
-    }
-
-    setQuotes(prev => prev.map(q => {
-      if (q.id !== id) return q;
-      const formattedItems: QuoteItem[] | undefined = items ? items.map((it, idx) => ({
-        ...it,
-        id: (it as any).id || `qi-${Date.now()}-${idx}`,
-        company_id: DEMO_COMPANY.id,
-        quote_id: id,
-      })) : q.items;
-
-      return {
-        ...q,
-        ...quoteData,
-        items: formattedItems,
-        updated_at: new Date().toISOString(),
-      };
+    const formattedItems = items?.map(item => ({
+      ...item,
+      id: (item as QuoteItem).id || uuid(),
+      company_id: activeCompanyId(),
+      quote_id: id,
     }));
-    logAuditAction('quote.updated', 'quote', id, quoteData);
+    const { customer: _customer, vehicle: _vehicle, versions: _versions, events: _events, items: _oldItems, ...safeData } = quoteData;
+    const patch = { ...safeData, updated_at: nowIso() };
+    setQuotes(prev => prev.map(quote => quote.id === id ? { ...quote, ...patch, items: formattedItems || quote.items } : quote));
+
+    if (productionMode && supabase) {
+      void supabase.from('quotes').update(patch).eq('id', id).eq('company_id', activeCompanyId()).then(async ({ error }) => {
+        persistError('quotes.update', error);
+        if (!error && formattedItems) {
+          const deleted = await supabase.from('quote_items').delete().eq('quote_id', id).eq('company_id', activeCompanyId());
+          persistError('quote_items.replace.delete', deleted.error);
+          const inserted = await supabase.from('quote_items').insert(formattedItems);
+          persistError('quote_items.replace.insert', inserted.error);
+        }
+      });
+    }
+    logAuditAction('quote.updated', 'quote', id, safeData as Record<string, unknown>);
     return true;
   };
 
@@ -403,352 +714,446 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
     quoteId: string,
     quoteData: Partial<Quote>,
     items: Omit<QuoteItem, 'id' | 'company_id' | 'quote_id'>[],
-    changeSummary?: string
+    changeSummary?: string,
   ): Quote => {
-    const quote = quotes.find(q => q.id === quoteId);
-    const nextVersionNum = ((quote?.current_version || quote?.version || 1) + 1);
-    
-    const formattedItems: QuoteItem[] = items.map((it, idx) => ({
-      ...it,
-      id: `qi-${Date.now()}-${idx}`,
-      company_id: DEMO_COMPANY.id,
-      quote_id: quoteId,
-    }));
+    const existing = quotes.find(quote => quote.id === quoteId);
+    if (!existing) throw new Error('Orçamento não encontrado.');
 
-    const newVersion: QuoteVersion = {
-      id: `qv-${Date.now()}-${nextVersionNum}`,
+    const companyId = activeCompanyId();
+    const nextVersion = (existing.current_version || existing.version || 1) + 1;
+    const formattedItems: QuoteItem[] = items.map(item => ({ ...item, id: uuid(), company_id: companyId, quote_id: quoteId }));
+    const version: QuoteVersion = {
+      id: uuid(),
       quote_id: quoteId,
-      company_id: DEMO_COMPANY.id,
-      version_number: nextVersionNum,
-      subtotal: quoteData.subtotal || quote?.subtotal || 0,
-      discount: quoteData.discount || 0,
-      total: quoteData.total || quote?.total || 0,
-      total_amount: quoteData.total || quote?.total || 0,
-      down_payment: quoteData.down_payment || 0,
-      balance: quoteData.balance || 0,
-      estimated_days: quoteData.estimated_days || 1,
-      notes: quoteData.notes || quote?.notes,
-      change_summary: changeSummary || `Revisão de valores / versão v${nextVersionNum}`,
+      company_id: companyId,
+      version_number: nextVersion,
+      subtotal: quoteData.subtotal ?? existing.subtotal,
+      discount: quoteData.discount ?? existing.discount,
+      total: quoteData.total ?? existing.total,
+      total_amount: quoteData.total ?? existing.total,
+      down_payment: quoteData.down_payment ?? existing.down_payment,
+      balance: quoteData.balance ?? existing.balance,
+      estimated_days: quoteData.estimated_days ?? existing.estimated_days,
+      notes: quoteData.notes ?? existing.notes,
+      change_summary: changeSummary || `Revisão v${nextVersion}`,
       items: formattedItems,
       items_snapshot: formattedItems,
       status: 'sent',
-      created_at: new Date().toISOString()
+      created_at: nowIso(),
+      created_by: user?.id,
     };
+    const event = {
+      id: uuid(),
+      company_id: companyId,
+      quote_id: quoteId,
+      event_type: 'edited' as const,
+      description: `Nova versão v${nextVersion} gerada`,
+      created_at: nowIso(),
+    };
+    const updated: Quote = {
+      ...existing,
+      ...quoteData,
+      current_version: nextVersion,
+      version: nextVersion,
+      status: 'sent',
+      is_immutable: false,
+      approved_at: undefined,
+      approval_snapshot: undefined,
+      items: formattedItems,
+      versions: [...(existing.versions || []), version],
+      events: [...(existing.events || []), event],
+      updated_at: nowIso(),
+    };
+    setQuotes(prev => prev.map(quote => quote.id === quoteId ? updated : quote));
 
-    let updatedQuote: Quote | null = null;
-    setQuotes(prev => prev.map(q => {
-      if (q.id !== quoteId) return q;
-      const newEvent = {
-        id: `qe-${Date.now()}`,
-        company_id: DEMO_COMPANY.id,
-        quote_id: quoteId,
-        event_type: 'edited' as const,
-        description: `Nova versão v${nextVersionNum} gerada (substitui v${q.current_version || 1})`,
-        created_at: new Date().toISOString()
-      };
-
-      updatedQuote = {
-        ...q,
-        ...quoteData,
-        current_version: nextVersionNum,
-        version: nextVersionNum,
-        status: 'sent',
-        is_immutable: false,
-        items: formattedItems,
-        versions: [...(q.versions || []), newVersion],
-        events: [...(q.events || []), newEvent],
-        updated_at: new Date().toISOString()
-      };
-      return updatedQuote;
-    }));
-
-    logAuditAction('quote.version_created', 'quote', quoteId, { version: nextVersionNum });
-    return updatedQuote ? enrichQuote(updatedQuote) : (quote as Quote);
+    if (productionMode && supabase) {
+      const row = quoteDbRow(updated);
+      void supabase.from('quotes').update(row).eq('id', quoteId).eq('company_id', companyId).then(async ({ error }) => {
+        persistError('quotes.new_version.update', error);
+        if (error) return;
+        const deleted = await supabase.from('quote_items').delete().eq('quote_id', quoteId).eq('company_id', companyId);
+        persistError('quote_items.new_version.delete', deleted.error);
+        const [itemsInsert, versionInsert, eventInsert] = await Promise.all([
+          supabase.from('quote_items').insert(formattedItems),
+          supabase.from('quote_versions').insert({
+            id: version.id,
+            quote_id: quoteId,
+            company_id: companyId,
+            version_number: nextVersion,
+            subtotal: version.subtotal,
+            discount: version.discount,
+            total: version.total,
+            down_payment: version.down_payment,
+            balance: version.balance,
+            estimated_days: version.estimated_days,
+            notes: version.notes,
+            items_snapshot: formattedItems,
+            status: 'sent',
+            created_by: user?.id,
+            created_at: version.created_at,
+          }),
+          supabase.from('quote_events').insert(event),
+        ]);
+        persistError('quote_items.new_version.insert', itemsInsert.error);
+        persistError('quote_versions.new_version.insert', versionInsert.error);
+        persistError('quote_events.new_version.insert', eventInsert.error);
+      });
+    }
+    logAuditAction('quote.version_created', 'quote', quoteId, { version: nextVersion });
+    return enrichQuote(updated);
   };
 
   const duplicateQuote = (quoteId: string): Quote | null => {
-    const original = quotes.find(q => q.id === quoteId);
+    const original = quotes.find(quote => quote.id === quoteId);
     if (!original) return null;
-
-    const maxNum = quotes.reduce((max, q) => {
-      const n = typeof q.quote_number === 'number' ? q.quote_number : parseInt(String(q.quote_number).replace(/\D/g, ''), 10) || 1000;
-      return Math.max(max, n);
-    }, 1000);
-    const nextNumber = maxNum + 1;
-    const token = `quote-${Math.random().toString(36).substring(2, 12)}${Date.now().toString(36).substring(4)}`;
-    const newId = `quote-${Date.now()}`;
-
-    const newQuote: Quote = {
-      ...original,
-      id: newId,
-      quote_number: `ORC-2026-${nextNumber}`,
-      current_version: 1,
-      version: 1,
+    return addQuote({
+      customer_id: original.customer_id,
+      vehicle_id: original.vehicle_id,
       status: 'draft',
-      public_token: token,
+      subtotal: original.subtotal,
+      discount: original.discount,
+      total: original.total,
+      down_payment: original.down_payment,
+      balance: original.balance,
+      estimated_days: original.estimated_days,
+      notes: original.notes,
+      internal_notes: original.internal_notes,
+      customer_complaint: original.customer_complaint,
+      technical_diagnosis: original.technical_diagnosis,
+      recommended_solution: original.recommended_solution,
+      version: 1,
       is_immutable: false,
+      public_token_expires_at: undefined,
+      public_token_revoked: false,
       approved_at: undefined,
       rejected_at: undefined,
+      rejection_category: undefined,
+      rejection_reason: undefined,
+      rejection_notes: undefined,
+      client_ip: undefined,
       approval_snapshot: undefined,
-      events: [
-        {
-          id: `qe-${Date.now()}`,
-          company_id: DEMO_COMPANY.id,
-          quote_id: newId,
-          event_type: 'created',
-          description: `Orçamento duplicado a partir do #${original.quote_number}`,
-          created_at: new Date().toISOString()
-        }
-      ],
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString()
-    };
-
-    setQuotes(prev => [newQuote, ...prev]);
-    logAuditAction('quote.duplicated', 'quote', newId, { from_quote_number: original.quote_number });
-    return enrichQuote(newQuote);
+      created_by: user?.id,
+      deleted_at: undefined,
+      customer: undefined,
+      vehicle: undefined,
+      items: undefined,
+      versions: undefined,
+      events: undefined,
+      total_amount: original.total,
+    }, (original.items || []).map(item => ({
+      type: item.type,
+      description: item.description,
+      quantity: item.quantity,
+      unit_price: item.unit_price,
+      discount: item.discount,
+      total_price: item.total_price,
+      created_at: undefined,
+    })));
   };
 
   const updateQuoteStatus = (id: string, status: QuoteStatus, reason?: string) => {
-    setQuotes(prev => prev.map(q => {
-      if (q.id !== id) return q;
-      const newEvent = {
-        id: `qe-${Date.now()}`,
-        company_id: DEMO_COMPANY.id,
-        quote_id: id,
-        event_type: status as any,
-        description: `Status alterado para ${status}${reason ? `: ${reason}` : ''}`,
-        created_at: new Date().toISOString(),
-      };
-      return {
-        ...q,
-        status,
-        rejection_reason: reason || q.rejection_reason,
-        events: [...(q.events || []), newEvent],
-        updated_at: new Date().toISOString(),
-      };
-    }));
+    const patch: Partial<Quote> = { status, updated_at: nowIso() };
+    if (status === 'rejected') {
+      patch.rejected_at = nowIso();
+      if (reason) patch.rejection_reason = reason;
+    }
+    setQuotes(prev => prev.map(quote => quote.id === id ? { ...quote, ...patch } : quote));
+    if (productionMode && supabase) {
+      void supabase.from('quotes').update(patch).eq('id', id).eq('company_id', activeCompanyId())
+        .then(({ error }) => persistError('quotes.status', error));
+    }
+    logAuditAction('quote.status_changed', 'quote', id, { status, reason });
   };
 
   const recordQuoteRejection = (id: string, category: RejectionReasonCategory, notes?: string) => {
-    updateQuoteStatus(id, 'rejected', notes || `Recusado: ${category}`);
-    setQuotes(prev => prev.map(q => q.id === id ? { ...q, rejection_category: category, rejection_notes: notes } : q));
+    const patch = {
+      status: 'rejected' as QuoteStatus,
+      rejected_at: nowIso(),
+      rejection_category: category,
+      rejection_reason: notes,
+      rejection_notes: notes,
+      updated_at: nowIso(),
+    };
+    setQuotes(prev => prev.map(quote => quote.id === id ? { ...quote, ...patch } : quote));
+    if (productionMode && supabase) {
+      void supabase.from('quotes').update(patch).eq('id', id).eq('company_id', activeCompanyId())
+        .then(({ error }) => persistError('quotes.reject', error));
+    }
+    logAuditAction('quote.rejected', 'quote', id, { category, notes });
   };
 
   const getQuoteById = (id: string) => {
-    const q = quotes.find(quote => quote.id === id && !quote.deleted_at);
-    return q ? enrichQuote(q) : undefined;
+    const quote = quotes.find(item => item.id === id && !item.deleted_at);
+    return quote ? enrichQuote(quote) : undefined;
   };
-
   const getQuoteByToken = (token: string) => {
-    const q = quotes.find(quote => quote.public_token === token && !quote.public_token_revoked);
-    return q ? enrichQuote(q) : undefined;
+    const quote = quotes.find(item => item.public_token === token && !item.public_token_revoked);
+    if (!quote) return undefined;
+    if (quote.public_token_expires_at && new Date(quote.public_token_expires_at).getTime() < Date.now()) return undefined;
+    return enrichQuote(quote);
   };
 
-  const approveQuotePublic = (token: string, approverName: string = 'Cliente', termsAgreed: boolean = true, clientIp?: string): Quote | null => {
-    let updatedQuote: Quote | null = null;
-    setQuotes(prev => prev.map(q => {
-      if (q.public_token !== token) return q;
-      
-      const approvalSnapshot: QuoteApprovalSnapshot = {
-        approved_at: new Date().toISOString(),
-        timestamp: new Date().toISOString(),
-        approved_name: approverName,
-        approved_by_name: approverName,
-        approved_total: q.total,
-        version_number: q.current_version || q.version || 1,
-        terms_agreed: termsAgreed,
-        terms_accepted: termsAgreed,
-        client_ip: clientIp || '127.0.0.1',
-        ip_address: clientIp || '127.0.0.1',
-        user_agent: navigator.userAgent,
-        items_snapshot: q.items || []
-      };
+  const approveQuotePublic = (
+    token: string,
+    approverName = 'Cliente',
+    termsAgreed = true,
+    _clientIp?: string,
+  ): Quote | null => {
+    const existing = getQuoteByToken(token);
+    if (!existing || !termsAgreed) return null;
 
-      const newEvent = {
-        id: `qe-${Date.now()}`,
-        company_id: DEMO_COMPANY.id,
-        quote_id: q.id,
-        event_type: 'approved' as const,
-        description: `Orçamento v${q.current_version || 1} aprovado por ${approverName} via link público`,
-        metadata: { client_ip: clientIp || 'auto', approverName },
-        created_at: new Date().toISOString(),
-      };
+    const snapshot: QuoteApprovalSnapshot = {
+      approved_at: nowIso(),
+      timestamp: nowIso(),
+      approved_name: approverName,
+      approved_by_name: approverName,
+      approved_total: existing.total,
+      version_number: existing.current_version || existing.version || 1,
+      terms_agreed: true,
+      terms_accepted: true,
+      user_agent: navigator.userAgent,
+      items_snapshot: existing.items || [],
+    };
+    const updated: Quote = {
+      ...existing,
+      status: 'approved',
+      approved_at: nowIso(),
+      is_immutable: true,
+      approval_snapshot: snapshot,
+      updated_at: nowIso(),
+    };
+    setQuotes(prev => prev.map(quote => quote.public_token === token ? updated : quote));
 
-      updatedQuote = {
-        ...q,
-        status: 'approved',
-        approved_at: new Date().toISOString(),
-        is_immutable: true,
-        approval_snapshot: approvalSnapshot,
-        client_ip: clientIp,
-        events: [...(q.events || []), newEvent],
-        updated_at: new Date().toISOString(),
-      };
-      return updatedQuote;
-    }));
-
-    if (updatedQuote) {
-      logAuditAction('quote.approved', 'quote', (updatedQuote as any).id, { approver: approverName, total: (updatedQuote as any).total });
+    if (!isDemoMode && supabase) {
+      void supabase.rpc('approve_public_quote', {
+        p_token: token,
+        p_approver_name: approverName,
+        p_terms_agreed: true,
+        p_user_agent: navigator.userAgent,
+      }).then(({ error }) => persistError('approve_public_quote', error));
     }
-    return updatedQuote ? enrichQuote(updatedQuote) : null;
+    return enrichQuote(updated);
   };
 
-  const rejectQuotePublic = (token: string, category?: RejectionReasonCategory, reason?: string, notes?: string): Quote | null => {
-    let updatedQuote: Quote | null = null;
-    setQuotes(prev => prev.map(q => {
-      if (q.public_token !== token) return q;
-      const newEvent = {
-        id: `qe-${Date.now()}`,
-        company_id: DEMO_COMPANY.id,
-        quote_id: q.id,
-        event_type: 'rejected' as const,
-        description: `Orçamento recusado pelo cliente (${category || 'Motivo geral'}: ${reason || 'Não informado'})`,
-        created_at: new Date().toISOString(),
-      };
-      updatedQuote = {
-        ...q,
-        status: 'rejected',
-        rejected_at: new Date().toISOString(),
-        rejection_category: category,
-        rejection_reason: reason,
-        rejection_notes: notes,
-        events: [...(q.events || []), newEvent],
-        updated_at: new Date().toISOString(),
-      };
-      return updatedQuote;
-    }));
+  const rejectQuotePublic = (
+    token: string,
+    category: RejectionReasonCategory = 'other',
+    reason?: string,
+    notes?: string,
+  ): Quote | null => {
+    const existing = getQuoteByToken(token);
+    if (!existing) return null;
+    const updated: Quote = {
+      ...existing,
+      status: 'rejected',
+      rejected_at: nowIso(),
+      rejection_category: category,
+      rejection_reason: reason,
+      rejection_notes: notes,
+      updated_at: nowIso(),
+    };
+    setQuotes(prev => prev.map(quote => quote.public_token === token ? updated : quote));
 
-    if (updatedQuote) {
-      logAuditAction('quote.rejected', 'quote', (updatedQuote as any).id, { category, reason });
+    if (!isDemoMode && supabase) {
+      void supabase.rpc('reject_public_quote', {
+        p_token: token,
+        p_category: category,
+        p_reason: reason || null,
+        p_notes: notes || null,
+      }).then(({ error }) => persistError('reject_public_quote', error));
     }
-    return updatedQuote ? enrichQuote(updatedQuote) : null;
+    return enrichQuote(updated);
   };
 
-  const convertQuoteToServiceOrder = (quoteId: string, responsibleName: string = 'Equipe Técnica'): ServiceOrder | null => {
-    const quote = quotes.find(q => q.id === quoteId);
+  const serviceOrderDbRow = (order: ServiceOrder, includeNumber = true) => {
+    const {
+      customer: _customer,
+      vehicle: _vehicle,
+      items: _items,
+      events: _events,
+      photos: _photos,
+      additional_approvals: _approvals,
+      estimated_completion_date: _estimatedCompletionDate,
+      ...row
+    } = order;
+    if (!includeNumber) delete (row as Partial<ServiceOrder>).os_number;
+    return row;
+  };
+
+  const addServiceOrder = (
+    osData: Omit<ServiceOrder, 'id' | 'company_id' | 'os_number' | 'public_token' | 'created_at' | 'updated_at'>,
+    items: Omit<ServiceOrderItem, 'id' | 'company_id' | 'service_order_id'>[] = [],
+  ): ServiceOrder => {
+    const companyId = activeCompanyId();
+    const id = uuid();
+    const nextNumber = serviceOrders.reduce((max, order) => Math.max(max, Number(order.os_number) || 0), 200) + 1;
+    const formattedItems: ServiceOrderItem[] = items.map(item => ({ ...item, id: uuid(), company_id: companyId, service_order_id: id }));
+    const order: ServiceOrder = {
+      ...osData,
+      id,
+      company_id: companyId,
+      os_number: nextNumber,
+      public_token: secureToken('os'),
+      items: formattedItems,
+      created_by: user?.id,
+      created_at: nowIso(),
+      updated_at: nowIso(),
+    };
+    setServiceOrders(prev => [order, ...prev]);
+
+    if (productionMode && supabase) {
+      void supabase.from('service_orders').insert(serviceOrderDbRow(order, false)).select('os_number').single().then(async ({ data, error }) => {
+        if (error) {
+          persistError('service_orders.insert', error);
+          return;
+        }
+        if (data?.os_number) setServiceOrders(prev => prev.map(item => item.id === id ? { ...item, os_number: data.os_number } : item));
+        if (formattedItems.length) {
+          const result = await supabase.from('service_order_items').insert(formattedItems);
+          persistError('service_order_items.insert', result.error);
+        }
+      });
+    }
+    logAuditAction('service_order.created', 'service_order', id, { os_number: nextNumber });
+    return order;
+  };
+
+  const convertQuoteToServiceOrder = (quoteId: string, responsibleName = 'Equipe Técnica'): ServiceOrder | null => {
+    const quote = quotes.find(item => item.id === quoteId);
     if (!quote) return null;
-
-    const maxOS = serviceOrders.reduce((max, o) => {
-      const n = typeof o.os_number === 'number' ? o.os_number : parseInt(String(o.os_number).replace(/\D/g, ''), 10) || 200;
-      return Math.max(max, n);
-    }, 200);
-    const nextOSNumber = maxOS + 1;
-    const token = `os-${Math.random().toString(36).substring(2, 12)}${Date.now().toString(36).substring(4)}`;
-    const osId = `os-${Date.now()}`;
-
-    const newOS: ServiceOrder = {
-      id: osId,
-      company_id: DEMO_COMPANY.id,
+    const order = addServiceOrder({
       quote_id: quote.id,
       customer_id: quote.customer_id,
       vehicle_id: quote.vehicle_id,
-      os_number: nextOSNumber,
       status: 'received',
-      public_token: token,
       responsible_name: responsibleName,
-      customer_complaint: quote.customer_complaint || quote.notes || 'Serviço originado a partir do orçamento aprovado.',
-      technical_diagnosis: quote.technical_diagnosis || quote.internal_notes || 'Inspeção aprovada conforme proposta.',
-      recommended_solution: quote.recommended_solution || quote.items?.map(it => it.description).join(', '),
-      start_date: new Date().toISOString(),
-      estimated_completion_at: new Date(Date.now() + (quote.estimated_days || 1) * 24 * 60 * 60 * 1000).toISOString(),
-      internal_estimated_delivery: new Date(Date.now() + (quote.estimated_days || 1) * 24 * 60 * 60 * 1000).toISOString(),
-      promised_completion_at: new Date(Date.now() + (quote.estimated_days || 1) * 24 * 60 * 60 * 1000 + 4 * 60 * 60 * 1000).toISOString(),
-      promised_client_delivery: new Date(Date.now() + (quote.estimated_days || 1) * 24 * 60 * 60 * 1000 + 4 * 60 * 60 * 1000).toISOString(),
-      initial_mileage: vehicles.find(v => v.id === quote.vehicle_id)?.mileage || 0,
+      customer_complaint: quote.customer_complaint || quote.notes,
+      technical_diagnosis: quote.technical_diagnosis,
+      recommended_solution: quote.recommended_solution,
+      start_date: nowIso(),
+      estimated_completion_at: new Date(Date.now() + (quote.estimated_days || 1) * 86_400_000).toISOString(),
+      promised_completion_at: new Date(Date.now() + (quote.estimated_days || 1) * 86_400_000 + 14_400_000).toISOString(),
+      initial_mileage: vehicles.find(vehicle => vehicle.id === quote.vehicle_id)?.mileage || 0,
       warranty_days: 90,
-      warranty_notes: 'Garantia legal de 90 dias referente a serviços prestados e peças aplicadas.',
+      warranty_notes: 'Garantia legal aplicável conforme o serviço executado e a legislação vigente.',
       notes: quote.notes,
       internal_notes: quote.internal_notes,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    };
-
-    setServiceOrders(prev => [newOS, ...prev]);
+      created_by: user?.id,
+      deleted_at: undefined,
+      customer: undefined,
+      vehicle: undefined,
+      items: undefined,
+      events: undefined,
+      photos: undefined,
+      additional_approvals: undefined,
+      responsible_id: undefined,
+      diagnosed_by: undefined,
+      diagnosed_at: undefined,
+      estimated_completion_date: undefined,
+      internal_estimated_delivery: undefined,
+      promised_client_delivery: undefined,
+      completed_at: undefined,
+      delivered_at: undefined,
+      final_mileage: undefined,
+    }, (quote.items || []).map(item => ({
+      type: item.type,
+      description: item.description,
+      quantity: item.quantity,
+      unit_price: item.unit_price,
+      total_price: item.total_price,
+      created_at: undefined,
+    })));
 
     if (quote.down_payment && quote.down_payment > 0) {
       addPayment({
-        service_order_id: osId,
+        service_order_id: order.id,
         quote_id: quote.id,
         amount: quote.down_payment,
         payment_type: 'pix',
         is_down_payment: true,
-        payment_date: new Date().toISOString(),
+        payment_date: nowIso(),
         notes: 'Sinal registrado na aprovação do orçamento',
+        deleted_at: undefined,
       });
     }
-
-    updateQuoteStatus(quoteId, 'approved', `Convertido na OS #${nextOSNumber}`);
-    logAuditAction('service_order.created_from_quote', 'service_order', osId, { quote_id: quoteId, os_number: nextOSNumber });
-    return newOS;
-  };
-
-  // 4. SERVICE ORDERS
-  const addServiceOrder = (
-    osData: Omit<ServiceOrder, 'id' | 'company_id' | 'os_number' | 'public_token' | 'created_at' | 'updated_at'>
-  ): ServiceOrder => {
-    const maxOS = serviceOrders.reduce((max, o) => {
-      const n = typeof o.os_number === 'number' ? o.os_number : parseInt(String(o.os_number).replace(/\D/g, ''), 10) || 200;
-      return Math.max(max, n);
-    }, 200);
-    const nextOSNumber = maxOS + 1;
-    const token = `os-${Math.random().toString(36).substring(2, 12)}${Date.now().toString(36).substring(4)}`;
-    const newOS: ServiceOrder = {
-      ...osData,
-      id: `os-${Date.now()}`,
-      company_id: DEMO_COMPANY.id,
-      os_number: nextOSNumber,
-      public_token: token,
-      created_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    };
-    setServiceOrders(prev => [newOS, ...prev]);
-    logAuditAction('service_order.created', 'service_order', newOS.id, { os_number: nextOSNumber });
-    return newOS;
+    updateQuoteStatus(quoteId, 'approved', `Convertido na OS #${order.os_number}`);
+    return order;
   };
 
   const updateServiceOrder = (id: string, osData: Partial<ServiceOrder>) => {
-    setServiceOrders(prev => prev.map(o => o.id === id ? { ...o, ...osData, updated_at: new Date().toISOString() } : o));
-    logAuditAction('service_order.updated', 'service_order', id, osData);
+    const { customer: _customer, vehicle: _vehicle, items: _items, events: _events, photos: _photos, additional_approvals: _approvals, ...safe } = osData;
+    const patch = { ...safe, updated_at: nowIso() };
+    setServiceOrders(prev => prev.map(order => order.id === id ? { ...order, ...patch } : order));
+    if (productionMode && supabase) {
+      void supabase.from('service_orders').update(patch).eq('id', id).eq('company_id', activeCompanyId())
+        .then(({ error }) => persistError('service_orders.update', error));
+    }
+    logAuditAction('service_order.updated', 'service_order', id, safe as Record<string, unknown>);
   };
 
   const updateServiceOrderStatus = (id: string, status: ServiceOrderStatus, notes?: string) => {
-    setServiceOrders(prev => prev.map(o => {
-      if (o.id !== id) return o;
-      const updates: Partial<ServiceOrder> = { status, updated_at: new Date().toISOString() };
-      if (status === 'ready' && !o.completed_at) {
-        updates.completed_at = new Date().toISOString();
-      }
-      if (status === 'delivered' && !o.delivered_at) {
-        updates.delivered_at = new Date().toISOString();
-      }
-      if (notes) {
-        updates.internal_notes = o.internal_notes ? `${o.internal_notes}\n[${new Date().toLocaleTimeString()}]: ${notes}` : notes;
-      }
-      return { ...o, ...updates };
-    }));
+    const existing = serviceOrders.find(order => order.id === id);
+    if (!existing) return;
+    const patch: Partial<ServiceOrder> = { status, updated_at: nowIso() };
+    if (status === 'ready' && !existing.completed_at) patch.completed_at = nowIso();
+    if (status === 'delivered' && !existing.delivered_at) patch.delivered_at = nowIso();
+    if (notes) patch.internal_notes = existing.internal_notes ? `${existing.internal_notes}\n[${new Date().toLocaleString('pt-BR')}]: ${notes}` : notes;
+    setServiceOrders(prev => prev.map(order => order.id === id ? { ...order, ...patch } : order));
+
+    if (productionMode && supabase) {
+      void supabase.from('service_orders').update(patch).eq('id', id).eq('company_id', activeCompanyId()).then(async ({ error }) => {
+        persistError('service_orders.status', error);
+        if (!error) {
+          const event = await supabase.from('service_order_events').insert({
+            id: uuid(),
+            company_id: activeCompanyId(),
+            service_order_id: id,
+            status_from: existing.status,
+            status_to: status,
+            notes,
+            created_by_name: user?.full_name,
+            created_at: nowIso(),
+          });
+          persistError('service_order_events.insert', event.error);
+        }
+      });
+    }
     logAuditAction('service_order.status_changed', 'service_order', id, { status, notes });
   };
 
-  const getServiceOrderById = (id: string) => serviceOrders.find(o => o.id === id && !o.deleted_at);
-  const getServiceOrderByToken = (token: string) => serviceOrders.find(o => o.public_token === token);
+  const getServiceOrderById = (id: string) => serviceOrders.find(order => order.id === id && !order.deleted_at);
+  const getServiceOrderByToken = (token: string) => serviceOrders.find(order => order.public_token === token && !order.deleted_at);
 
-  const addServiceOrderPhoto = (osId: string, photo: Omit<ServiceOrderPhoto, 'id' | 'company_id' | 'service_order_id' | 'created_at'>) => {
+  const addServiceOrderPhoto = (
+    osId: string,
+    photoData: Omit<ServiceOrderPhoto, 'id' | 'company_id' | 'service_order_id' | 'created_at'>,
+  ) => {
+    const photo: ServiceOrderPhoto = {
+      ...photoData,
+      id: uuid(),
+      company_id: activeCompanyId(),
+      service_order_id: osId,
+      created_at: nowIso(),
+    };
+    setServiceOrders(prev => prev.map(order => order.id === osId ? { ...order, photos: [...(order.photos || []), photo] } : order));
+    if (productionMode && supabase) {
+      void supabase.from('service_order_photos').insert(photo).then(({ error }) => persistError('service_order_photos.insert', error));
+    }
     logAuditAction('service_order.photo_added', 'service_order', osId, { category: photo.category });
   };
 
   const addAdditionalApproval = (
-    osId: string, 
-    title: string, 
-    description: string, 
+    osId: string,
+    title: string,
+    description: string,
     amount: number,
-    partsAmount: number = 0,
-    laborAmount: number = 0,
-    photoUrl?: string
+    partsAmount = 0,
+    laborAmount = 0,
+    photoUrl?: string,
   ): AdditionalApproval => {
     const approval: AdditionalApproval = {
-      id: `appr-${Date.now()}`,
-      company_id: DEMO_COMPANY.id,
+      id: uuid(),
+      company_id: activeCompanyId(),
       service_order_id: osId,
       title,
       description,
@@ -757,358 +1162,326 @@ export const DataProvider: React.FC<{ children: React.ReactNode }> = ({ children
       labor_amount: laborAmount,
       photo_url: photoUrl,
       status: 'pending',
-      public_token: `extra-${Math.random().toString(36).substring(2, 10)}`,
-      requested_by: 'Mecânico Técnico',
-      created_at: new Date().toISOString()
+      public_token: secureToken('extra'),
+      requested_by: user?.full_name || 'Equipe Técnica',
+      created_at: nowIso(),
     };
-
-    setServiceOrders(prev => prev.map(os => {
-      if (os.id !== osId) return os;
-      return {
-        ...os,
-        additional_approvals: [...(os.additional_approvals || []), approval]
-      };
-    }));
-
+    setServiceOrders(prev => prev.map(order => order.id === osId ? {
+      ...order,
+      additional_approvals: [...(order.additional_approvals || []), approval],
+    } : order));
+    if (productionMode && supabase) {
+      void supabase.from('additional_approvals').insert(approval).then(({ error }) => persistError('additional_approvals.insert', error));
+    }
     logAuditAction('additional_approval.created', 'service_order', osId, { title, amount });
     return approval;
   };
 
-  const respondAdditionalApproval = (approvalToken: string, approved: boolean, approverName: string = 'Cliente', reason?: string): boolean => {
+  const respondAdditionalApproval = (
+    approvalToken: string,
+    approved: boolean,
+    approverName = 'Cliente',
+    reason?: string,
+  ): boolean => {
     let found = false;
-    setServiceOrders(prev => prev.map(os => {
-      if (!os.additional_approvals) return os;
-      const updatedApprovals = os.additional_approvals.map(appr => {
-        if (appr.public_token === approvalToken) {
-          found = true;
-          return {
-            ...appr,
-            status: approved ? ('approved' as const) : ('rejected' as const),
-            responded_at: new Date().toISOString(),
-            responded_by_name: approverName,
-            rejection_reason: reason
-          };
-        }
-        return appr;
-      });
-      return { ...os, additional_approvals: updatedApprovals };
+    setServiceOrders(prev => prev.map(order => {
+      if (!(order.additional_approvals || []).some(approval => approval.public_token === approvalToken)) return order;
+      found = true;
+      return {
+        ...order,
+        additional_approvals: (order.additional_approvals || []).map(approval => approval.public_token === approvalToken ? {
+          ...approval,
+          status: approved ? 'approved' : 'rejected',
+          responded_at: nowIso(),
+          responded_by_name: approverName,
+          rejection_reason: reason,
+        } : approval),
+      };
     }));
 
-    if (found) {
-      logAuditAction(approved ? 'additional_approval.approved' : 'additional_approval.rejected', 'additional_approval', approvalToken, { approver: approverName });
+    if (!isDemoMode && supabase) {
+      if (user) {
+        void supabase.from('additional_approvals').update({
+          status: approved ? 'approved' : 'rejected',
+          responded_at: nowIso(),
+          responded_by_name: approverName,
+          rejection_reason: reason,
+        }).eq('public_token', approvalToken).eq('company_id', activeCompanyId())
+          .then(({ error }) => persistError('additional_approvals.update', error));
+      } else {
+        void supabase.rpc('respond_public_additional_approval', {
+          p_token: approvalToken,
+          p_approved: approved,
+          p_approver_name: approverName,
+          p_reason: reason || null,
+        }).then(({ error }) => persistError('respond_public_additional_approval', error));
+      }
     }
+    if (found) logAuditAction(approved ? 'additional_approval.approved' : 'additional_approval.rejected', 'additional_approval', approvalToken, { approverName });
     return found;
   };
 
-  // 5. PAYMENTS
   const addPayment = (paymentData: Omit<Payment, 'id' | 'company_id' | 'created_at'>): Payment => {
-    const newPayment: Payment = {
-      ...paymentData,
-      id: `pay-${Date.now()}`,
-      company_id: DEMO_COMPANY.id,
-      created_at: new Date().toISOString(),
-    };
-    setPayments(prev => [newPayment, ...prev]);
-    logAuditAction('payment.created', 'payment', newPayment.id, { amount: newPayment.amount, type: newPayment.payment_type });
-    return newPayment;
+    const payment: Payment = { ...paymentData, id: uuid(), company_id: activeCompanyId(), created_at: nowIso() };
+    setPayments(prev => [payment, ...prev]);
+    if (productionMode && supabase) {
+      void supabase.from('payments').insert(payment).then(({ error }) => persistError('payments.insert', error));
+    }
+    logAuditAction('payment.created', 'payment', payment.id, { amount: payment.amount, type: payment.payment_type });
+    return payment;
   };
 
   const deletePayment = (id: string) => {
-    setPayments(prev => prev.map(p => p.id === id ? { ...p, deleted_at: new Date().toISOString() } : p));
+    const deletedAt = nowIso();
+    setPayments(prev => prev.map(payment => payment.id === id ? { ...payment, deleted_at: deletedAt } : payment));
+    if (productionMode && supabase) {
+      void supabase.from('payments').update({ deleted_at: deletedAt }).eq('id', id).eq('company_id', activeCompanyId())
+        .then(({ error }) => persistError('payments.soft_delete', error));
+    }
     logAuditAction('payment.deleted', 'payment', id);
   };
+  const getPaymentsByOS = (osId: string) => payments.filter(payment => payment.service_order_id === osId && !payment.deleted_at);
 
-  const getPaymentsByOS = (osId: string) => {
-    return payments.filter(p => p.service_order_id === osId && !p.deleted_at);
-  };
-
-  // 6. REMINDERS
   const addReminder = (reminderData: Omit<Reminder, 'id' | 'company_id' | 'created_at'>): Reminder => {
-    const newReminder: Reminder = {
-      ...reminderData,
-      id: `rem-${Date.now()}`,
-      company_id: DEMO_COMPANY.id,
-      created_at: new Date().toISOString(),
-    };
-    setReminders(prev => [newReminder, ...prev]);
-    logAuditAction('reminder.created', 'reminder', newReminder.id, { type: newReminder.type });
-    return newReminder;
+    const { customer: _customer, vehicle: _vehicle, ...data } = reminderData;
+    const reminder: Reminder = { ...data, id: uuid(), company_id: activeCompanyId(), created_at: nowIso() };
+    setReminders(prev => [reminder, ...prev]);
+    if (productionMode && supabase) {
+      void supabase.from('reminders').insert(reminder).then(({ error }) => persistError('reminders.insert', error));
+    }
+    logAuditAction('reminder.created', 'reminder', reminder.id, { type: reminder.type });
+    return reminder;
   };
 
   const updateReminderStatus = (id: string, status: Reminder['status']) => {
-    setReminders(prev => prev.map(r => r.id === id ? { ...r, status, contacted_at: status === 'contacted' ? new Date().toISOString() : r.contacted_at } : r));
+    const patch = { status, contacted_at: status === 'contacted' ? nowIso() : undefined };
+    setReminders(prev => prev.map(reminder => reminder.id === id ? { ...reminder, ...patch } : reminder));
+    if (productionMode && supabase) {
+      void supabase.from('reminders').update(patch).eq('id', id).eq('company_id', activeCompanyId())
+        .then(({ error }) => persistError('reminders.update', error));
+    }
     logAuditAction('reminder.status_updated', 'reminder', id, { status });
   };
 
   const deleteReminder = (id: string) => {
-    setReminders(prev => prev.map(r => r.id === id ? { ...r, deleted_at: new Date().toISOString() } : r));
+    const deletedAt = nowIso();
+    setReminders(prev => prev.map(reminder => reminder.id === id ? { ...reminder, deleted_at: deletedAt } : reminder));
+    if (productionMode && supabase) {
+      void supabase.from('reminders').update({ deleted_at: deletedAt }).eq('id', id).eq('company_id', activeCompanyId())
+        .then(({ error }) => persistError('reminders.soft_delete', error));
+    }
   };
 
-  // 7. CATALOG & PACKAGES
   const addCatalogItem = (item: Omit<ServiceCatalogItem, 'id' | 'company_id' | 'created_at'>): ServiceCatalogItem => {
-    const newItem: ServiceCatalogItem = {
-      ...item,
-      id: `cat-${Date.now()}`,
-      company_id: DEMO_COMPANY.id,
-      use_count: 1,
-      created_at: new Date().toISOString(),
-    };
-    setCatalog(prev => [...prev, newItem]);
-    return newItem;
+    const catalogItem: ServiceCatalogItem = { ...item, id: uuid(), company_id: activeCompanyId(), created_at: nowIso() };
+    setCatalog(prev => [catalogItem, ...prev]);
+    if (productionMode && supabase) {
+      void supabase.from('services_catalog').insert(catalogItem).then(({ error }) => persistError('services_catalog.insert', error));
+    }
+    return catalogItem;
   };
 
   const toggleFavoriteCatalogItem = (id: string) => {
-    setCatalog(prev => prev.map(c => c.id === id ? { ...c, is_favorite: !c.is_favorite } : c));
+    const existing = catalog.find(item => item.id === id);
+    if (!existing) return;
+    const isFavorite = !existing.is_favorite;
+    setCatalog(prev => prev.map(item => item.id === id ? { ...item, is_favorite: isFavorite } : item));
+    if (productionMode && supabase) {
+      void supabase.from('services_catalog').update({ is_favorite: isFavorite }).eq('id', id).eq('company_id', activeCompanyId())
+        .then(({ error }) => persistError('services_catalog.favorite', error));
+    }
   };
 
   const deleteCatalogItem = (id: string) => {
-    setCatalog(prev => prev.filter(c => c.id !== id));
+    setCatalog(prev => prev.filter(item => item.id !== id));
+    if (productionMode && supabase) {
+      void supabase.from('services_catalog').delete().eq('id', id).eq('company_id', activeCompanyId())
+        .then(({ error }) => persistError('services_catalog.delete', error));
+    }
   };
 
   const addPackage = (pkg: Omit<ServicePackage, 'id' | 'company_id' | 'created_at'>): ServicePackage => {
-    const newPkg: ServicePackage = {
-      ...pkg,
-      id: `pkg-${Date.now()}`,
-      company_id: DEMO_COMPANY.id,
-      created_at: new Date().toISOString()
-    };
-    setPackages(prev => [...prev, newPkg]);
-    return newPkg;
+    const servicePackage: ServicePackage = { ...pkg, id: uuid(), company_id: activeCompanyId(), created_at: nowIso() };
+    setPackages(prev => [servicePackage, ...prev]);
+    if (productionMode && supabase) {
+      const row = {
+        id: servicePackage.id,
+        company_id: servicePackage.company_id,
+        name: servicePackage.name,
+        description: servicePackage.description,
+        items: servicePackage.items,
+        total_suggested_price: servicePackage.total_suggested_price ?? servicePackage.total_price ?? 0,
+        created_at: servicePackage.created_at,
+      };
+      void supabase.from('service_packages').insert(row).then(({ error }) => persistError('service_packages.insert', error));
+    }
+    return servicePackage;
   };
 
   const deletePackage = (id: string) => {
-    setPackages(prev => prev.filter(p => p.id !== id));
+    setPackages(prev => prev.filter(item => item.id !== id));
+    if (productionMode && supabase) {
+      void supabase.from('service_packages').delete().eq('id', id).eq('company_id', activeCompanyId())
+        .then(({ error }) => persistError('service_packages.delete', error));
+    }
   };
 
-  // 8. FOLLOW-UP & DASHBOARD METRICS
-  const getStagnantQuotes = (): Quote[] => {
-    const twoDaysMs = 48 * 60 * 60 * 1000;
-    return quotes.filter(q => {
-      if (q.status !== 'sent' && q.status !== 'viewed') return false;
-      const elapsed = Date.now() - new Date(q.created_at).getTime();
-      return elapsed >= twoDaysMs && !q.deleted_at;
-    });
+  const getStagnantQuotes = () => {
+    const cutoff = Date.now() - 48 * 60 * 60 * 1000;
+    return quotes.filter(quote => ['sent', 'viewed'].includes(quote.status) && !quote.deleted_at && new Date(quote.updated_at || quote.created_at).getTime() <= cutoff);
   };
 
   const getLostQuotesBreakdown = () => {
-    const rejected = quotes.filter(q => q.status === 'rejected' && !q.deleted_at);
-    const categoryMap: Record<string, { count: number; total: number }> = {
-      price: { count: 0, total: 0 },
-      deadline: { count: 0, total: 0 },
-      competitor: { count: 0, total: 0 },
-      later: { count: 0, total: 0 },
-      not_needed: { count: 0, total: 0 },
-      gave_up: { count: 0, total: 0 },
-      sold_car: { count: 0, total: 0 },
-      other: { count: 0, total: 0 }
-    };
-
-    rejected.forEach(q => {
-      const cat = q.rejection_category || 'other';
-      if (!categoryMap[cat]) categoryMap[cat] = { count: 0, total: 0 };
-      categoryMap[cat].count += 1;
-      categoryMap[cat].total += (q.total || 0);
+    const rejected = quotes.filter(quote => quote.status === 'rejected' && !quote.deleted_at);
+    const map: Record<string, { count: number; total: number }> = {};
+    rejected.forEach(quote => {
+      const category = quote.rejection_category || 'other';
+      map[category] ||= { count: 0, total: 0 };
+      map[category].count += 1;
+      map[category].total += quote.total || 0;
     });
-
-    const totalCount = rejected.length || 1;
-    return Object.entries(categoryMap).map(([category, val]) => ({
+    const denominator = rejected.length || 1;
+    return Object.entries(map).map(([category, value]) => ({
       category,
-      count: val.count,
-      total: val.total,
-      percentage: (val.count / totalCount) * 100
+      count: value.count,
+      total: value.total,
+      percentage: (value.count / denominator) * 100,
     }));
   };
 
   const getDashboardMetrics = (): DashboardMetrics => {
-    const activeVehiclesCount = serviceOrders.filter(o => o.status !== 'delivered' && o.status !== 'cancelled' && !o.deleted_at).length;
-    const newQuotesCount = quotes.filter(q => (q.status === 'draft' || q.status === 'sent') && !q.deleted_at).length;
-    
-    const awaitingQuotes = quotes.filter(q => (q.status === 'sent' || q.status === 'viewed') && !q.deleted_at);
-    const awaitingApprovalQuotesCount = awaitingQuotes.length;
-    const awaitingApprovalAmount = awaitingQuotes.reduce((acc, q) => acc + (q.total || 0), 0);
-
+    const activeOrders = serviceOrders.filter(order => !['delivered', 'cancelled'].includes(order.status) && !order.deleted_at);
+    const liveQuotes = quotes.filter(quote => !quote.deleted_at);
+    const awaiting = liveQuotes.filter(quote => ['sent', 'viewed'].includes(quote.status));
     const stagnant = getStagnantQuotes();
-    const stagnantQuotesCount = stagnant.length;
-    const stagnantQuotesAmount = stagnant.reduce((acc, q) => acc + (q.total || 0), 0);
-
-    const approvedQuotes = quotes.filter(q => q.status === 'approved' && !q.deleted_at);
-    const approvedQuotesCount = approvedQuotes.length;
-    const totalQuotesSent = quotes.filter(q => q.status !== 'draft' && !q.deleted_at).length;
-    const quoteConversionRate = totalQuotesSent > 0 ? (approvedQuotesCount / totalQuotesSent) * 100 : 0;
-
-    const readyServicesCount = serviceOrders.filter(o => o.status === 'ready' && !o.deleted_at).length;
-
+    const approved = liveQuotes.filter(quote => quote.status === 'approved');
+    const sent = liveQuotes.filter(quote => quote.status !== 'draft');
+    const rejected = liveQuotes.filter(quote => quote.status === 'rejected');
+    const paid = payments.filter(payment => !payment.deleted_at).reduce((total, payment) => total + payment.amount, 0);
+    const approvedValue = approved.reduce((total, quote) => total + quote.total, 0);
     const now = Date.now();
-    const atRiskDeliveriesCount = serviceOrders.filter(o => {
-      if (o.status === 'ready' || o.status === 'delivered' || o.status === 'cancelled' || o.deleted_at) return false;
-      const targetTime = o.promised_client_delivery ? new Date(o.promised_client_delivery).getTime() : 
-        o.promised_completion_at ? new Date(o.promised_completion_at).getTime() : null;
-      if (!targetTime) return false;
-      return targetTime - now <= 4 * 60 * 60 * 1000;
-    }).length;
-
-    const totalOSValue = serviceOrders.filter(o => !o.deleted_at).reduce((acc, os) => {
-      const quote = quotes.find(q => q.id === os.quote_id);
-      return acc + (quote?.total || 0);
-    }, 0);
-    const totalPaymentsReceived = payments.filter(p => !p.deleted_at).reduce((acc, p) => acc + (p.amount || 0), 0);
-    const pendingPaymentAmount = Math.max(0, totalOSValue - totalPaymentsReceived);
-    const estimatedRevenue = approvedQuotes.reduce((acc, q) => acc + (q.total || 0), 0);
-
-    const lostQuotes = quotes.filter(q => q.status === 'rejected' && !q.deleted_at);
-    const lostQuotesCount = lostQuotes.length;
-    const lostQuotesAmount = lostQuotes.reduce((acc, q) => acc + (q.total || 0), 0);
+    const atRisk = activeOrders.filter(order => {
+      const deadline = order.promised_client_delivery || order.promised_completion_at || order.estimated_completion_at;
+      if (!deadline || order.status === 'ready') return false;
+      const remaining = new Date(deadline).getTime() - now;
+      return remaining <= 24 * 60 * 60 * 1000;
+    });
 
     return {
-      activeVehiclesCount,
-      newQuotesCount,
-      awaitingApprovalQuotesCount,
-      awaitingApprovalAmount,
-      stagnantQuotesCount,
-      stagnantQuotesAmount,
-      approvedQuotesCount,
-      readyServicesCount,
-      pendingPaymentAmount,
-      estimatedRevenue,
-      quoteConversionRate,
-      totalQuotesSent,
-      atRiskDeliveriesCount,
-      lostQuotesAmount,
-      lostQuotesCount
+      activeVehiclesCount: activeOrders.length,
+      newQuotesCount: liveQuotes.filter(quote => ['draft', 'sent'].includes(quote.status)).length,
+      awaitingApprovalQuotesCount: awaiting.length,
+      awaitingApprovalAmount: awaiting.reduce((total, quote) => total + quote.total, 0),
+      stagnantQuotesCount: stagnant.length,
+      stagnantQuotesAmount: stagnant.reduce((total, quote) => total + quote.total, 0),
+      approvedQuotesCount: approved.length,
+      readyServicesCount: serviceOrders.filter(order => order.status === 'ready' && !order.deleted_at).length,
+      pendingPaymentAmount: Math.max(approvedValue - paid, 0),
+      estimatedRevenue: approvedValue,
+      quoteConversionRate: sent.length ? (approved.length / sent.length) * 100 : 0,
+      totalQuotesSent: sent.length,
+      atRiskDeliveriesCount: atRisk.length,
+      lostQuotesAmount: rejected.reduce((total, quote) => total + quote.total, 0),
+      lostQuotesCount: rejected.length,
     };
   };
 
-  // 9. GLOBAL SEARCH
   const searchGlobal = (query: string) => {
-    const q = query.trim().toLowerCase();
-    if (!q) return { customers: [], vehicles: [], quotes: [], serviceOrders: [] };
-
-    const matchedCustomers = customers.filter(c => 
-      !c.deleted_at && (
-        c.name.toLowerCase().includes(q) || 
-        c.phone?.toLowerCase().includes(q) || 
-        c.whatsapp.toLowerCase().includes(q) ||
-        c.document?.toLowerCase().includes(q)
-      )
-    );
-
-    const matchedVehicles = vehicles.filter(v => 
-      !v.deleted_at && (
-        v.license_plate.toLowerCase().includes(q) ||
-        v.model.toLowerCase().includes(q) ||
-        v.make.toLowerCase().includes(q)
-      )
-    );
-
-    const matchedQuotes = quotes.filter(quote => 
-      !quote.deleted_at && (
-        quote.quote_number.toString().includes(q) ||
-        quote.customer?.name.toLowerCase().includes(q) ||
-        quote.vehicle?.license_plate.toLowerCase().includes(q)
-      )
-    );
-
-    const matchedServiceOrders = serviceOrders.filter(os => 
-      !os.deleted_at && (
-        os.os_number.toString().includes(q) ||
-        os.responsible_name?.toLowerCase().includes(q)
-      )
-    );
-
+    const normalized = query.trim().toLocaleLowerCase('pt-BR');
+    if (!normalized) return { customers: [], vehicles: [], quotes: [], serviceOrders: [] };
     return {
-      customers: matchedCustomers,
-      vehicles: matchedVehicles,
-      quotes: matchedQuotes,
-      serviceOrders: matchedServiceOrders
+      customers: customers.filter(customer => [customer.name, customer.whatsapp, customer.phone, customer.document, customer.email]
+        .some(value => value?.toLocaleLowerCase('pt-BR').includes(normalized))),
+      vehicles: vehicles.filter(vehicle => [vehicle.make, vehicle.model, vehicle.version, vehicle.license_plate, vehicle.color]
+        .some(value => String(value || '').toLocaleLowerCase('pt-BR').includes(normalized))),
+      quotes: quotes.filter(quote => String(quote.quote_number).toLocaleLowerCase('pt-BR').includes(normalized) || quote.customer?.name?.toLocaleLowerCase('pt-BR').includes(normalized)),
+      serviceOrders: serviceOrders.filter(order => String(order.os_number).toLocaleLowerCase('pt-BR').includes(normalized)),
     };
   };
 
-  // 10. RESET TO DEMO
   const resetAllDataToDemo = () => {
-    setCustomers(DEMO_CUSTOMERS);
-    setVehicles(DEMO_VEHICLES);
-    setQuotes(DEMO_QUOTES);
-    setServiceOrders(DEMO_SERVICE_ORDERS);
-    setPayments(DEMO_PAYMENTS);
-    setReminders(DEMO_REMINDERS);
-    setCatalog(DEMO_CATALOG);
-    setPackages(DEMO_PACKAGES);
-    setAuditLogs(DEMO_AUDIT_LOGS);
-    localStorage.removeItem('konnexy_customers');
-    localStorage.removeItem('konnexy_vehicles');
-    localStorage.removeItem('konnexy_quotes');
-    localStorage.removeItem('konnexy_service_orders');
-    localStorage.removeItem('konnexy_payments');
-    localStorage.removeItem('konnexy_reminders');
-    localStorage.removeItem('konnexy_catalog');
-    localStorage.removeItem('konnexy_packages');
-    localStorage.removeItem('konnexy_audit_logs');
+    if (!isDemoMode) return;
+    Object.values(DEMO_STORAGE).forEach(key => localStorage.removeItem(key));
+    loadDemoData();
   };
 
-  return (
-    <DataContext.Provider
-      value={{
-        customers,
-        vehicles,
-        quotes,
-        serviceOrders,
-        payments,
-        reminders,
-        catalog,
-        packages,
-        servicePackages: packages,
-        auditLogs,
-        platformCompanies,
-        addCustomer,
-        updateCustomer,
-        deleteCustomer,
-        getCustomerById,
-        addVehicle,
-        updateVehicle,
-        deleteVehicle,
-        getVehicleById,
-        getVehiclesByCustomer,
-        addQuote,
-        updateQuote,
-        createNewQuoteVersion,
-        duplicateQuote,
-        updateQuoteStatus,
-        recordQuoteRejection,
-        getQuoteById,
-        getQuoteByToken,
-        approveQuotePublic,
-        rejectQuotePublic,
-        convertQuoteToServiceOrder,
-        addServiceOrder,
-        updateServiceOrder,
-        updateServiceOrderStatus,
-        getServiceOrderById,
-        getServiceOrderByToken,
-        addServiceOrderPhoto,
-        addAdditionalApproval,
-        respondAdditionalApproval,
-        addPayment,
-        deletePayment,
-        getPaymentsByOS,
-        addReminder,
-        updateReminderStatus,
-        deleteReminder,
-        addCatalogItem,
-        toggleFavoriteCatalogItem,
-        deleteCatalogItem,
-        addPackage,
-        deletePackage,
-        getStagnantQuotes,
-        getLostQuotesBreakdown,
-        getDashboardMetrics,
-        logAuditAction,
-        searchGlobal,
-        resetAllDataToDemo
-      }}
-    >
-      {children}
-    </DataContext.Provider>
-  );
+  const value = useMemo<DataContextType>(() => ({
+    customers,
+    vehicles,
+    quotes,
+    serviceOrders,
+    payments,
+    reminders,
+    catalog,
+    packages,
+    servicePackages: packages,
+    auditLogs,
+    platformCompanies,
+    isDataLoading,
+    addCustomer,
+    updateCustomer,
+    deleteCustomer,
+    getCustomerById,
+    addVehicle,
+    updateVehicle,
+    deleteVehicle,
+    getVehicleById,
+    getVehiclesByCustomer,
+    addQuote,
+    updateQuote,
+    createNewQuoteVersion,
+    duplicateQuote,
+    updateQuoteStatus,
+    recordQuoteRejection,
+    getQuoteById,
+    getQuoteByToken,
+    approveQuotePublic,
+    rejectQuotePublic,
+    convertQuoteToServiceOrder,
+    addServiceOrder,
+    updateServiceOrder,
+    updateServiceOrderStatus,
+    getServiceOrderById,
+    getServiceOrderByToken,
+    addServiceOrderPhoto,
+    addAdditionalApproval,
+    respondAdditionalApproval,
+    addPayment,
+    deletePayment,
+    getPaymentsByOS,
+    addReminder,
+    updateReminderStatus,
+    deleteReminder,
+    addCatalogItem,
+    toggleFavoriteCatalogItem,
+    deleteCatalogItem,
+    addPackage,
+    deletePackage,
+    getStagnantQuotes,
+    getLostQuotesBreakdown,
+    getDashboardMetrics,
+    logAuditAction,
+    searchGlobal,
+    resetAllDataToDemo,
+    reloadData,
+  }), [
+    customers,
+    vehicles,
+    quotes,
+    serviceOrders,
+    payments,
+    reminders,
+    catalog,
+    packages,
+    auditLogs,
+    platformCompanies,
+    isDataLoading,
+    user,
+    isDemoMode,
+    company,
+  ]);
+
+  return <DataContext.Provider value={value}>{children}</DataContext.Provider>;
 };
 
 export const useData = () => {
