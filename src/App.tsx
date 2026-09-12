@@ -5,18 +5,16 @@ import { TenantProvider } from './context/TenantContext';
 import { DataProvider } from './context/DataContext';
 import { ToastProvider } from './components/ui/Toast';
 
-// Layout
 import { AppLayout } from './components/layout/AppLayout';
 
-// Public & Auth Pages
 import { LandingPage } from './pages/LandingPage';
 import { LoginPage } from './pages/auth/LoginPage';
 import { RegisterPage } from './pages/auth/RegisterPage';
 import { ForgotPasswordPage } from './pages/auth/ForgotPasswordPage';
+import { ResetPasswordPage } from './pages/auth/ResetPasswordPage';
 import { PublicQuotePage } from './pages/public/PublicQuotePage';
 import { PublicTrackingPage } from './pages/public/PublicTrackingPage';
 
-// App Pages
 import { DashboardPage } from './pages/dashboard/DashboardPage';
 import { QuotesListPage } from './pages/quotes/QuotesListPage';
 import { QuoteCreateEditPage } from './pages/quotes/QuoteCreateEditPage';
@@ -34,12 +32,12 @@ import { SettingsPage } from './pages/settings/SettingsPage';
 import { OnboardingPage } from './pages/onboarding/OnboardingPage';
 import { SuperadminPage } from './pages/superadmin/SuperadminPage';
 
-// Protected Route Guard
-const ProtectedRoute: React.FC<{ children: React.ReactNode; requiredPermission?: PermissionKey }> = ({ 
-  children, 
-  requiredPermission 
+const ProtectedRoute: React.FC<{ children: React.ReactNode; requiredPermission?: PermissionKey }> = ({
+  children,
+  requiredPermission,
 }) => {
   const { isAuthenticated, isLoading, canAccess } = useAuth();
+
   if (isLoading) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center">
@@ -47,12 +45,9 @@ const ProtectedRoute: React.FC<{ children: React.ReactNode; requiredPermission?:
       </div>
     );
   }
-  if (!isAuthenticated) {
-    return <Navigate to="/login" replace />;
-  }
-  if (requiredPermission && !canAccess(requiredPermission)) {
-    return <Navigate to="/dashboard" replace />;
-  }
+
+  if (!isAuthenticated) return <Navigate to="/login" replace />;
+  if (requiredPermission && !canAccess(requiredPermission)) return <Navigate to="/dashboard" replace />;
   return <>{children}</>;
 };
 
@@ -64,88 +59,55 @@ export function App() {
           <DataProvider>
             <ToastProvider>
               <Routes>
-                {/* 1. Public Marketing Landing & Auth */}
                 <Route path="/" element={<LandingPage />} />
                 <Route path="/landing" element={<LandingPage />} />
                 <Route path="/login" element={<LoginPage />} />
                 <Route path="/register" element={<RegisterPage />} />
                 <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+                <Route path="/reset-password" element={<ResetPasswordPage />} />
 
-                {/* 2. Public Client Pages (Cryptographic tokens, no auth required) */}
                 <Route path="/orcamento/:token" element={<PublicQuotePage />} />
                 <Route path="/acompanhar/:token" element={<PublicTrackingPage />} />
 
-                {/* 3. Onboarding Wizard */}
                 <Route
                   path="/onboarding"
-                  element={
-                    <ProtectedRoute>
-                      <OnboardingPage />
-                    </ProtectedRoute>
-                  }
+                  element={<ProtectedRoute><OnboardingPage /></ProtectedRoute>}
                 />
 
-                {/* 4. Protected Workshop Application */}
-                <Route
-                  element={
-                    <ProtectedRoute>
-                      <AppLayout />
-                    </ProtectedRoute>
-                  }
-                >
+                <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
                   <Route path="/dashboard" element={<DashboardPage />} />
-                  
-                  {/* Quotes */}
+
                   <Route path="/quotes" element={<QuotesListPage />} />
                   <Route path="/quotes/new" element={<QuoteCreateEditPage />} />
                   <Route path="/quotes/follow-up" element={<FollowUpQueuePage />} />
                   <Route path="/quotes/:id" element={<QuoteDetailsPage />} />
                   <Route path="/quotes/:id/edit" element={<QuoteCreateEditPage />} />
 
-                  {/* Service Orders */}
                   <Route path="/service-orders" element={<ServiceOrdersListPage />} />
                   <Route path="/service-orders/kanban" element={<ServiceOrderKanbanPage />} />
                   <Route path="/service-orders/:id" element={<ServiceOrderDetailsPage />} />
 
-                  {/* Customers & Vehicles */}
                   <Route path="/customers" element={<CustomersListPage />} />
                   <Route path="/customers/:id" element={<CustomerDetailsPage />} />
                   <Route path="/vehicles/:id/history" element={<VehicleHistoryPage />} />
 
-                  {/* Post-Sale Reminders */}
                   <Route path="/reminders" element={<RemindersPage />} />
 
-                  {/* Reports & Settings */}
-                  <Route 
-                    path="/reports" 
-                    element={
-                      <ProtectedRoute requiredPermission="view_financial_reports">
-                        <ReportsPage />
-                      </ProtectedRoute>
-                    } 
+                  <Route
+                    path="/reports"
+                    element={<ProtectedRoute requiredPermission="view_financial_reports"><ReportsPage /></ProtectedRoute>}
                   />
-                  <Route 
-                    path="/settings" 
-                    element={
-                      <ProtectedRoute requiredPermission="manage_company_settings">
-                        <SettingsPage />
-                      </ProtectedRoute>
-                    } 
+                  <Route
+                    path="/settings"
+                    element={<ProtectedRoute requiredPermission="manage_company_settings"><SettingsPage /></ProtectedRoute>}
                   />
-
-                  {/* Superadmin Platform Governance */}
-                  <Route 
-                    path="/superadmin" 
-                    element={
-                      <ProtectedRoute requiredPermission="view_superadmin">
-                        <SuperadminPage />
-                      </ProtectedRoute>
-                    } 
+                  <Route
+                    path="/superadmin"
+                    element={<ProtectedRoute requiredPermission="view_superadmin"><SuperadminPage /></ProtectedRoute>}
                   />
                 </Route>
 
-                {/* Catch-all redirect */}
-                <Route path="*" element={<Navigate to="/dashboard" replace />} />
+                <Route path="*" element={<Navigate to="/" replace />} />
               </Routes>
             </ToastProvider>
           </DataProvider>
