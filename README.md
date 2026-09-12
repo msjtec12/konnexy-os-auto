@@ -43,21 +43,24 @@ Nunca coloque `service_role` ou qualquer chave privada em variáveis `VITE_*`.
 Para um projeto novo:
 
 1. Execute `src/supabase/schema.sql` no SQL Editor do Supabase.
-2. Em seguida execute `src/supabase/migrations/20260912_production_hardening.sql`.
+2. Execute, nesta ordem:
+   - `src/supabase/migrations/20260912_production_hardening.sql`
+   - `src/supabase/migrations/20260912_quote_version_guard.sql`
 3. Configure em **Authentication > URL Configuration** a URL de produção e as URLs de preview necessárias.
 4. Confirme que o e-mail de recuperação redireciona para `/reset-password`.
 
-Para um banco já existente, execute somente as migrations que ainda não foram aplicadas, começando por `20260912_production_hardening.sql`.
+Para um banco já existente, execute somente as migrations que ainda não foram aplicadas, sempre respeitando a ordem dos arquivos.
 
-### O que a migration de hardening faz
+### O que as migrations de hardening fazem
 
-- remove políticas RLS anônimas permissivas;
-- bloqueia leitura/edição pública direta de `quotes`, `service_orders` e `additional_approvals`;
-- cria RPCs públicas que validam token, expiração e revogação;
-- cria automaticamente `company`, `profile` e `company_users` no cadastro;
-- restringe atualização de campos críticos de `profiles` e `companies`;
-- adiciona proteção de imutabilidade para orçamentos aprovados;
-- adiciona expiração/revogação aos tokens de acompanhamento e aprovações adicionais.
+- removem políticas RLS anônimas permissivas;
+- bloqueiam leitura/edição pública direta de `quotes`, `service_orders` e `additional_approvals`;
+- criam RPCs públicas que validam token, expiração e revogação;
+- criam automaticamente `company`, `profile` e `company_users` no cadastro;
+- restringem atualização de campos críticos de `profiles` e `companies`;
+- protegem orçamentos aprovados contra alteração direta;
+- limpam evidências da aprovação anterior ao iniciar uma nova versão do orçamento;
+- adicionam expiração/revogação aos tokens de acompanhamento e aprovações adicionais.
 
 ## Links públicos
 
@@ -94,7 +97,7 @@ A pipeline `.github/workflows/ci.yml` executa lint e build em pull requests e br
 
 ## Checklist antes de liberar clientes reais
 
-- [ ] Migration de hardening aplicada no Supabase
+- [ ] Todas as migrations de `src/supabase/migrations` aplicadas no Supabase, em ordem
 - [ ] `VITE_SUPABASE_URL` configurada na Vercel
 - [ ] `VITE_SUPABASE_ANON_KEY` configurada na Vercel
 - [ ] URL de produção configurada no Supabase Auth
