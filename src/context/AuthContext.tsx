@@ -28,10 +28,10 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 const DEMO_USER: Profile = {
   id: 'user-admin-1',
   email: 'admin@autoprimeauto.com.br',
-  full_name: 'Carlos Gerente (Owner)',
+  full_name: 'Carlos Silva (Proprietário)',
   role: 'owner',
   phone: '(11) 98765-4321',
-  is_superadmin: true,
+  is_superadmin: false,
   created_at: new Date().toISOString()
 };
 

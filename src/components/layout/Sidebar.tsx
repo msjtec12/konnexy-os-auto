@@ -52,7 +52,8 @@ export const Sidebar: React.FC = () => {
     { label: 'Pós-Venda Assistido', to: '/reminders', icon: <Clock className="w-5 h-5" />, visible: true },
     { label: 'Relatórios', to: '/reports', icon: <BarChart3 className="w-5 h-5" />, visible: canAccess('view_financial_reports') },
     { label: 'Configurações', to: '/settings', icon: <Settings className="w-5 h-5" />, visible: canAccess('manage_company_settings') },
-    { label: 'Superadmin Plataforma', to: '/superadmin', icon: <ShieldCheck className="w-5 h-5 text-indigo-400" />, visible: canAccess('view_superadmin') },
+    // O painel Master/Superadmin é rota interna da Konnexy segregada, exibida apenas para superadmin autenticado e não para oficinas comuns
+    { label: 'Superadmin Plataforma', to: '/superadmin', icon: <ShieldCheck className="w-5 h-5 text-indigo-400" />, visible: Boolean(user?.is_superadmin && user?.role === 'superadmin') },
   ].filter(item => item.visible);
 
   return (

@@ -15,6 +15,8 @@ import { RegisterPage } from './pages/auth/RegisterPage';
 import { ForgotPasswordPage } from './pages/auth/ForgotPasswordPage';
 import { PublicQuotePage } from './pages/public/PublicQuotePage';
 import { PublicTrackingPage } from './pages/public/PublicTrackingPage';
+import { TermsPage } from './pages/legal/TermsPage';
+import { PrivacyPage } from './pages/legal/PrivacyPage';
 
 // App Pages
 import { DashboardPage } from './pages/dashboard/DashboardPage';
@@ -67,6 +69,8 @@ export function App() {
                 {/* 1. Public Marketing Landing & Auth */}
                 <Route path="/" element={<LandingPage />} />
                 <Route path="/landing" element={<LandingPage />} />
+                <Route path="/termos" element={<TermsPage />} />
+                <Route path="/privacidade" element={<PrivacyPage />} />
                 <Route path="/login" element={<LoginPage />} />
                 <Route path="/register" element={<RegisterPage />} />
                 <Route path="/forgot-password" element={<ForgotPasswordPage />} />

@@ -152,9 +152,24 @@ export const LandingPage: React.FC = () => {
       </section>
 
       {/* Footer */}
-      <footer className="border-t border-slate-800 py-8 px-4 text-center text-xs text-slate-500">
-        <p>© 2026 Konnexy OS Auto. Todos os direitos reservados.</p>
-        <p className="mt-1">Feito para centros automotivos, oficinas mecânicas, autoelétricas e estética automotiva.</p>
+      <footer className="border-t border-slate-800 py-10 px-4 text-center text-xs text-slate-500 space-y-3">
+        <div className="flex flex-wrap items-center justify-center gap-6 text-slate-400">
+          <Link to="/termos" className="hover:text-primary-400 transition-colors">
+            Termos de Uso
+          </Link>
+          <span>•</span>
+          <Link to="/privacidade" className="hover:text-primary-400 transition-colors">
+            Política de Privacidade (LGPD)
+          </Link>
+          <span>•</span>
+          <a href="mailto:contato@konnexy.com.br" className="hover:text-primary-400 transition-colors">
+            Suporte e Contato
+          </a>
+        </div>
+        <p>© 2026 Konnexy OS Auto Tecnologia Ltda. Todos os direitos reservados.</p>
+        <p className="text-[11px] text-slate-600">
+          CNPJ: 00.000.000/0001-00 (Ambiente de Demonstração / Homologação) • Feito para oficinas mecânicas, centros automotivos e estética automotiva no Brasil.
+        </p>
       </footer>
     </div>
   );

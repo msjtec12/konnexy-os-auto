@@ -1,0 +1,25 @@
+User-agent: *
+Allow: /
+Allow: /landing
+Allow: /termos
+Allow: /privacidade
+
+# Bloquear rotas autenticadas e privadas de oficinas e clientes
+Disallow: /dashboard
+Disallow: /dashboard/
+Disallow: /quotes
+Disallow: /quotes/
+Disallow: /service-orders
+Disallow: /service-orders/
+Disallow: /customers
+Disallow: /customers/
+Disallow: /vehicles
+Disallow: /vehicles/
+Disallow: /reports
+Disallow: /settings
+Disallow: /superadmin
+Disallow: /onboarding
+Disallow: /orcamento/
+Disallow: /acompanhar/
+
+Sitemap: https://osauto.konnexy.com.br/sitemap.xml
