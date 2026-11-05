@@ -1,7 +1,7 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Shield, FileText } from 'lucide-react';
-import { Button } from '../components/ui/Button';
+import { Button } from '../../components/ui/Button';
 
 export const TermsPage: React.FC = () => {
   const navigate = useNavigate();

@@ -12,6 +12,8 @@
 import { generatePixPayload } from '../lib/pix';
 import { interpolateWhatsAppTemplate, WHATSAPP_TEMPLATES } from '../lib/whatsapp';
 import { generateColorShades } from '../lib/theme';
+import { isValidCPF, isValidCNPJ, isValidLicensePlate, normalizeLicensePlate } from '../lib/validators';
+import { toCents, fromCents, addMoney, multiplyMoney } from '../lib/money';
 import { UserRole, Quote, QuoteVersion } from '../types';
 
 export interface TestResult {
@@ -276,6 +278,29 @@ export function runAllAutomatedTests(): { passedCount: number; failedCount: numb
     assert(false, 'Dynamic Theming Engine', 'Theme Generation Test', err.message);
   }
 
+  // ====================================================
+  // Suite 6: Brazilian Validation & Legal Compliance (CPF/CNPJ & Placas)
+  // ====================================================
+  assert(isValidCPF('52998224725'), 'Brazilian Validators', 'Valid CPF Check', 'Valid CPF should pass');
+  assert(!isValidCPF('11111111111'), 'Brazilian Validators', 'Invalid CPF Repeated Digits', 'Repeated digits should fail');
+  assert(!isValidCPF('12345678900'), 'Brazilian Validators', 'Invalid CPF Checksum', 'Invalid checksum should fail');
+
+  assert(isValidCNPJ('11222333000181'), 'Brazilian Validators', 'Valid CNPJ Check', 'Valid CNPJ should pass');
+  assert(!isValidCNPJ('00000000000000'), 'Brazilian Validators', 'Invalid CNPJ Check', 'Repeated CNPJ should fail');
+
+  assert(isValidLicensePlate('ABC-1234'), 'Brazilian Plate Engine', 'Old Plate With Hyphen', 'Old plate format should be valid');
+  assert(isValidLicensePlate('BRA2E19'), 'Brazilian Plate Engine', 'Mercosul Plate', 'Mercosul plate should be valid');
+  assert(normalizeLicensePlate('bra-2e19') === 'BRA2E19', 'Brazilian Plate Engine', 'Plate Normalization', 'Plate must be uppercase clean');
+
+  // ====================================================
+  // Suite 7: Financial Precision (Centavos Inteiros)
+  // ====================================================
+  assert(toCents(19.99) === 1999, 'Financial Precision', 'To Cents Conversion', 'Float conversion to integer cents');
+  assert(fromCents(1999) === 19.99, 'Financial Precision', 'From Cents Conversion', 'Cents to float display');
+  // Evitar 0.1 + 0.2 = 0.30000000000000004
+  assert(addMoney(0.1, 0.2) === 0.3, 'Financial Precision', 'Safe Addition', 'Safe addition must yield exactly 0.3');
+  assert(multiplyMoney(10.50, 3) === 31.50, 'Financial Precision', 'Safe Multiplication', 'Safe multiplication');
+
   // Calculate summary
   const passedCount = results.filter(r => r.passed).length;
   const failedCount = results.filter(r => !r.passed).length;
@@ -285,4 +310,23 @@ export function runAllAutomatedTests(): { passedCount: number; failedCount: numb
     failedCount,
     results,
   };
+}
+
+// Auto-run if executed directly via node/tsx
+const globalProcess = (globalThis as any).process;
+if (typeof globalProcess !== 'undefined' && globalProcess?.argv && globalProcess?.argv[1] && globalProcess.argv[1].includes('suite.ts')) {
+  console.log('🚀 Executando Konnexy OS Auto - Suíte Automatizada de Prontidão...');
+  const outcome = runAllAutomatedTests();
+  outcome.results.forEach(r => {
+    const icon = r.passed ? '✓' : '✗';
+    console.log(`${icon} [${r.suite}] ${r.name}: ${r.message}`);
+  });
+  console.log(`\n========================================`);
+  console.log(`Testes Concluídos: ${outcome.passedCount} passaram | ${outcome.failedCount} falharam`);
+  console.log(`Taxa de Sucesso: ${((outcome.passedCount / (outcome.passedCount + outcome.failedCount)) * 100).toFixed(1)}%`);
+  console.log(`========================================\n`);
+
+  if (outcome.failedCount > 0) {
+    globalProcess.exit(1);
+  }
 }

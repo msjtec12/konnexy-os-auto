@@ -144,11 +144,14 @@ export type QuoteStatus = 'draft' | 'sent' | 'viewed' | 'approved' | 'rejected' 
 
 export type RejectionReasonCategory = 'price' | 'deadline' | 'later' | 'competitor' | 'not_needed' | 'gave_up' | 'sold_car' | 'other';
 
+export type PartCondition = 'original_new' | 'aftermarket_new' | 'reconditioned';
+
 export interface QuoteItem {
   id: string;
   company_id?: string;
   quote_id?: string;
   type: 'service' | 'part';
+  part_condition?: PartCondition; // Exigência CDC Art. 21 (Peças recondicionadas/originais)
   description: string;
   quantity: number;
   unit_price: number;
@@ -267,6 +270,7 @@ export interface ServiceOrderItem {
   company_id?: string;
   service_order_id?: string;
   type: 'service' | 'part';
+  part_condition?: PartCondition;
   description: string;
   quantity: number;
   unit_price: number;
